@@ -45,6 +45,7 @@ class Chapter(Base):
     chapter_number = Column(Integer, nullable=False)
     title = Column(String)
     content = Column(Text)  # HTML 内容
+    word_count = Column(Integer, default=0)  # 章节单词数
 
     book = relationship("Book", back_populates="chapters")
 

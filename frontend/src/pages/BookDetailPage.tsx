@@ -10,6 +10,7 @@ export default function BookDetailPage() {
   const [book, setBook] = useState<BookDetail | null>(null);
   const [vocabulary, setVocabulary] = useState<Vocabulary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'chapters' | 'vocabulary'>('chapters');
 
   useEffect(() => {
     if (id) {
@@ -22,7 +23,7 @@ export default function BookDetailPage() {
       setLoading(true);
       const [bookRes, vocabRes] = await Promise.all([
         booksAPI.getBook(bookId),
-        booksAPI.getVocabulary(bookId, 50),
+        booksAPI.getVocabulary(bookId, 100),
       ]);
       setBook(bookRes.data);
       setVocabulary(vocabRes.data);
@@ -35,12 +36,17 @@ export default function BookDetailPage() {
 
   const startReading = () => {
     if (!book) return;
-
-    // 检查是否有阅读进度
     const progress = progressStorage.get(book.id);
     const chapter = progress?.current_chapter || 1;
-
     navigate(`/reader/${book.id}?chapter=${chapter}`);
+  };
+
+  // 计算阅读进度百分比
+  const getProgress = () => {
+    if (!book) return 0;
+    const progress = progressStorage.get(book.id);
+    if (!progress) return 0;
+    return Math.round((progress.current_chapter / book.chapters.length) * 100);
   };
 
   if (loading) {
@@ -62,10 +68,12 @@ export default function BookDetailPage() {
     );
   }
 
+  const progressPercent = getProgress();
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center">
           <button
             onClick={() => navigate('/books')}
@@ -73,121 +81,191 @@ export default function BookDetailPage() {
           >
             ← 返回
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">书籍详情</h1>
+          <h1 className="text-xl font-bold text-gray-900">书籍详情</h1>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Left: Book cover and info */}
-          <div className="md:col-span-1">
-            <div className="bg-white rounded-lg shadow-md overflow-hidden sticky top-8">
-              {/* Cover */}
-              <div className="aspect-[2/3] bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-                {book.cover ? (
-                  <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-white text-center p-8">
-                    <div className="text-3xl font-bold mb-2">{book.title}</div>
-                    <div className="text-lg opacity-90">{book.author}</div>
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Book info card */}
+        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+          <div className="flex gap-6">
+            {/* Cover */}
+            <div className="w-32 h-44 flex-shrink-0 rounded-lg overflow-hidden shadow-lg">
+              {book.cover ? (
+                <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center p-2">
+                  <span className="text-white text-center text-sm font-bold">{book.title}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-bold mb-2 truncate">{book.title}</h2>
+              <p className="text-gray-500 mb-4">{book.author}</p>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">{vocabulary.length}</div>
+                  <div className="text-xs text-gray-500">高频生词</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">{book.word_count.toLocaleString()}</div>
+                  <div className="text-xs text-gray-500">总词数</div>
+                </div>
+              </div>
+
+              {/* Progress */}
+              {progressPercent > 0 && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>阅读进度</span>
+                    <span>{progressPercent}%</span>
                   </div>
-                )}
-              </div>
-
-              {/* Info */}
-              <div className="p-6 space-y-4">
-                <div>
-                  <h2 className="text-2xl font-bold mb-1">{book.title}</h2>
-                  <p className="text-gray-600">{book.author}</p>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
                 </div>
+              )}
 
-                <div className="flex gap-2 flex-wrap">
-                  {book.level && (
-                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                      {book.level}
-                    </span>
-                  )}
-                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-                    {book.word_count.toLocaleString()} 词
-                  </span>
-                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-                    {book.chapters.length} 章节
-                  </span>
-                </div>
-
-                <button
-                  onClick={startReading}
-                  className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition"
-                >
-                  开始阅读
-                </button>
-              </div>
+              {/* Level badge */}
+              {book.level && (
+                <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {book.level}
+                </span>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Right: Description and vocabulary */}
-          <div className="md:col-span-2 space-y-6">
-            {/* Description */}
-            {book.description && (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-xl font-bold mb-4">简介</h3>
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {book.description}
-                </p>
-              </div>
+        {/* Action buttons */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <button
+            onClick={startReading}
+            className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition"
+          >
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <span className="font-medium text-gray-700">
+              {progressPercent > 0 ? '继续阅读' : '开始阅读'}
+            </span>
+            {progressPercent > 0 && (
+              <span className="text-xs text-blue-600">{progressPercent}%</span>
             )}
+          </button>
 
-            {/* High-frequency vocabulary */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-xl font-bold mb-4">高频生词预览</h3>
-              {vocabulary.length === 0 ? (
-                <p className="text-gray-500">暂无词汇数据</p>
-              ) : (
-                <div className="grid gap-3">
-                  {vocabulary.map((vocab) => (
+          <button
+            onClick={() => setActiveTab('vocabulary')}
+            className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition"
+          >
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+            </div>
+            <span className="font-medium text-gray-700">高频生词</span>
+            <span className="text-xs text-yellow-600">{vocabulary.length} 词</span>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('chapters')}
+              className={`flex-1 py-4 text-center font-medium transition ${
+                activeTab === 'chapters'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              章节目录
+            </button>
+            <button
+              onClick={() => setActiveTab('vocabulary')}
+              className={`flex-1 py-4 text-center font-medium transition ${
+                activeTab === 'vocabulary'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              高频生词
+            </button>
+          </div>
+
+          {/* Tab content */}
+          <div className="p-4">
+            {activeTab === 'chapters' ? (
+              <div className="space-y-2">
+                {book.chapters.map((chapter) => (
+                  <div
+                    key={chapter.id}
+                    className="flex items-center justify-between p-4 border border-gray-100 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition cursor-pointer"
+                    onClick={() => navigate(`/reader/${book.id}?chapter=${chapter.chapter_number}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800">
+                        {chapter.chapter_number}. {chapter.title || `Chapter ${chapter.chapter_number}`}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 ml-4">
+                      {chapter.word_count > 0 && (
+                        <span className="text-xs text-gray-400">
+                          {chapter.word_count} 词
+                        </span>
+                      )}
+                      <span className="text-gray-300">→</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {vocabulary.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">暂无词汇数据</p>
+                ) : (
+                  vocabulary.map((vocab) => (
                     <div
                       key={vocab.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition"
+                      className="p-4 border border-gray-100 rounded-lg hover:bg-gray-50 transition"
                     >
                       <div className="flex items-baseline gap-3">
-                        <span className="font-bold text-lg">{vocab.word}</span>
+                        <span className="font-bold text-lg text-gray-800">{vocab.word}</span>
                         {vocab.phonetic && (
-                          <span className="text-gray-500 text-sm">{vocab.phonetic}</span>
+                          <span className="text-gray-400 text-sm">{vocab.phonetic}</span>
                         )}
-                        <span className="ml-auto text-xs text-gray-400">
-                          出现 {vocab.frequency} 次
+                        <span className="ml-auto text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
+                          {vocab.frequency}次
                         </span>
                       </div>
                       {vocab.definition && (
                         <p className="text-gray-600 mt-2 text-sm">{vocab.definition}</p>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Chapter list */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-xl font-bold mb-4">章节列表</h3>
-              <div className="space-y-2">
-                {book.chapters.map((chapter) => (
-                  <div
-                    key={chapter.id}
-                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer"
-                    onClick={() => navigate(`/reader/${book.id}?chapter=${chapter.chapter_number}`)}
-                  >
-                    <span className="font-medium">
-                      第 {chapter.chapter_number} 章
-                      {chapter.title && `: ${chapter.title}`}
-                    </span>
-                    <span className="text-gray-400 text-sm">→</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
+
+        {/* Description */}
+        {book.description && (
+          <div className="bg-white rounded-xl shadow-md p-6 mt-6">
+            <h3 className="text-lg font-bold mb-3">简介</h3>
+            <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
+              {book.description}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

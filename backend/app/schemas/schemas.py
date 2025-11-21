@@ -30,6 +30,7 @@ class ChapterResponse(BaseModel):
     chapter_number: int
     title: Optional[str] = None
     content: Optional[str] = None
+    word_count: int = 0
 
     class Config:
         from_attributes = True

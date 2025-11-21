@@ -17,6 +17,7 @@ export interface Chapter {
   chapter_number: number;
   title?: string;
   content?: string;
+  word_count: number;
 }
 
 // 书籍详情（包含章节）

@@ -171,20 +171,25 @@ export default function ReaderPage() {
   return (
     <div className={`min-h-screen ${themes[settings.theme].bg} ${themes[settings.theme].text}`}>
       {/* Top toolbar */}
-      <header className="sticky top-0 z-10 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700">
+      <header className="sticky top-0 z-10 bg-white/95 dark:bg-gray-800/95 backdrop-blur border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => navigate(`/books/${id}`)} className="text-gray-600 hover:text-gray-900">
+          <button onClick={() => navigate(`/books/${id}`)} className="text-gray-600 hover:text-gray-900 flex-shrink-0">
             ← 返回
           </button>
 
-          <div className="flex-1 text-center">
-            <span className="font-medium">{book.title}</span>
-            <span className="text-gray-500 text-sm ml-2">
-              第 {chapterNumber} / {book.chapters.length} 章
-            </span>
+          <div className="flex-1 text-center px-4 min-w-0">
+            <div className="font-medium truncate">{book.title}</div>
+            <div className="text-gray-500 text-sm flex items-center justify-center gap-3">
+              <span>{chapterNumber} / {book.chapters.length}</span>
+              {currentChapter && currentChapter.word_count > 0 && (
+                <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs">
+                  {currentChapter.word_count} 词
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={() => setShowToc(!showToc)}
               className="px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -218,8 +223,12 @@ export default function ReaderPage() {
                         : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                   >
-                    第 {chapter.chapter_number} 章
-                    {chapter.title && <div className="text-xs opacity-70">{chapter.title}</div>}
+                    <div className="font-medium">
+                      {chapter.chapter_number}. {chapter.title || `Chapter ${chapter.chapter_number}`}
+                    </div>
+                    {chapter.word_count > 0 && (
+                      <div className="text-xs text-gray-400 mt-0.5">{chapter.word_count} 词</div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -237,7 +246,9 @@ export default function ReaderPage() {
             <>
               {/* Chapter title */}
               {currentChapter?.title && (
-                <h2 className="text-2xl font-bold mb-8 text-center">{currentChapter.title}</h2>
+                <h2 className="text-2xl font-bold mb-8 text-center">
+                  {chapterNumber}. {currentChapter.title}
+                </h2>
               )}
 
               {/* Content */}
