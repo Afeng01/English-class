@@ -22,7 +22,9 @@ export default function BooksPage() {
       if (selectedLevel) params.level = selectedLevel;
       if (searchQuery) params.search = searchQuery;
 
+      console.log('Fetching books with params:', params);
       const response = await booksAPI.getBooks(params);
+      console.log('Books response:', response.data);
       setBooks(response.data);
     } catch (error) {
       console.error('Failed to load books:', error);
@@ -89,7 +91,9 @@ export default function BooksPage() {
         ) : books.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">暂无书籍</p>
-            <p className="text-gray-400 mt-2">请使用后端脚本导入 EPUB 书籍</p>
+            <p className="text-gray-400 mt-2">
+              {selectedLevel ? `"${selectedLevel}" 等级暂无书籍` : '请使用后端脚本导入 EPUB 书籍'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

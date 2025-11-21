@@ -4,9 +4,13 @@ from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 
-# 数据库路径
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "reading.db")
+# 数据库路径 - 使用绝对路径确保一致性
+_current_file = os.path.abspath(__file__)
+_backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(_current_file)))
+DB_PATH = os.path.join(_backend_dir, "data", "reading.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+print(f"Database path: {DB_PATH}")  # 调试信息
 
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
