@@ -56,3 +56,5 @@ class DictionaryResponse(BaseModel):
     phonetic: Optional[str] = None
     meanings: List[dict] = []
     audio: Optional[str] = None
+    searched_word: Optional[str] = None  # 用户查询的原词（词形变化）
+    lemma: Optional[str] = None  # 还原后的词根

@@ -7,3 +7,5 @@ httpx==0.28.1
 ebooklib==0.18
 beautifulsoup4==4.12.3
 aiofiles==24.1.0
+nltk==3.9.1
+python-dotenv==1.0.0

@@ -46,6 +46,8 @@ export interface DictionaryResult {
     }[];
   }[];
   audio?: string;
+  searched_word?: string;  // 用户查询的原词（词形变化）
+  lemma?: string;  // 还原后的词根
 }
 
 // 本地词汇库

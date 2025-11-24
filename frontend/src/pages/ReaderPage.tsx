@@ -23,6 +23,7 @@ export default function ReaderPage() {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordResult, setWordResult] = useState<DictionaryResult | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -79,24 +80,78 @@ export default function ReaderPage() {
 
   const handleWordClick = async (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    const word = target.textContent?.trim();
+
+    // 获取点击位置的文本
+    const selection = window.getSelection();
+    let word = '';
+
+    // 如果有选中文本，使用选中的文本
+    if (selection && selection.toString().trim()) {
+      word = selection.toString().trim();
+    } else {
+      // 否则，智能提取点击位置的单词
+      const text = target.textContent || '';
+      const clickX = e.clientX;
+
+      // 使用Range API获取点击位置的字符偏移
+      const range = document.caretRangeFromPoint(clickX, e.clientY);
+      if (range) {
+        const offset = range.startOffset;
+
+        // 向前查找单词边界
+        let start = offset;
+        while (start > 0 && /[a-zA-Z]/.test(text[start - 1])) {
+          start--;
+        }
+
+        // 向后查找单词边界
+        let end = offset;
+        while (end < text.length && /[a-zA-Z]/.test(text[end])) {
+          end++;
+        }
+
+        word = text.substring(start, end);
+      } else {
+        // 降级方案：获取元素的文本内容
+        word = target.textContent?.trim() || '';
+      }
+    }
 
     if (!word || word.length < 2) return;
 
-    // 提取纯单词（去除标点）
+    // 提取纯单词（去除标点和数字）
     const cleanWord = word.replace(/[^a-zA-Z]/g, '').toLowerCase();
-    if (!cleanWord) return;
+    if (!cleanWord || cleanWord.length < 2) return;
 
     setSelectedWord(cleanWord);
     setPopoverPosition({ x: e.clientX, y: e.clientY });
     setLookupLoading(true);
+    setLookupError(null);
+    setWordResult(null);
 
     try {
       const response = await dictionaryAPI.lookup(cleanWord);
       setWordResult(response.data);
-    } catch (error) {
+      setLookupError(null);
+    } catch (error: any) {
       console.error('Lookup failed:', error);
       setWordResult(null);
+
+      // 提取错误消息
+      let errorMessage = '未找到该单词的释义';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        // 如果detail是对象，提取message字段
+        if (typeof detail === 'object' && detail.message) {
+          errorMessage = detail.message;
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setLookupError(errorMessage);
     } finally {
       setLookupLoading(false);
     }
@@ -105,6 +160,7 @@ export default function ReaderPage() {
   const closePopover = () => {
     setSelectedWord(null);
     setWordResult(null);
+    setLookupError(null);
   };
 
   const playAudio = () => {
@@ -359,12 +415,17 @@ export default function ReaderPage() {
           >
             {lookupLoading ? (
               <p className="text-center text-gray-500">查询中...</p>
+            ) : lookupError ? (
+              <div className="text-center">
+                <p className="text-red-500 mb-2">{lookupError}</p>
+                <p className="text-gray-400 text-sm">尝试查询的单词：{selectedWord}</p>
+              </div>
             ) : !wordResult ? (
               <p className="text-center text-gray-500">未找到释义</p>
             ) : (
               <div>
                 <div className="flex items-baseline gap-2 mb-3">
-                  <h4 className="text-xl font-bold">{selectedWord}</h4>
+                  <h4 className="text-xl font-bold">{wordResult.word}</h4>
                   {wordResult.phonetic && (
                     <span className="text-gray-500 text-sm">{wordResult.phonetic}</span>
                   )}
@@ -375,6 +436,15 @@ export default function ReaderPage() {
                     🔊
                   </button>
                 </div>
+
+                {/* 词形还原提示 */}
+                {wordResult.lemma && wordResult.searched_word && (
+                  <div className="mb-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-md text-sm">
+                    <span className="text-blue-700 dark:text-blue-300">
+                      "{wordResult.searched_word}" 的词根是 "{wordResult.lemma}"
+                    </span>
+                  </div>
+                )}
 
                 {wordResult.meanings.map((meaning, idx) => (
                   <div key={idx} className="mb-3">
