@@ -10,9 +10,12 @@ export default function ReaderPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // 从URL参数初始化章节号，避免先加载第一章再加载正确章节的问题
+  const initialChapter = parseInt(searchParams.get('chapter') || '1');
+
   const [book, setBook] = useState<BookDetail | null>(null);
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
-  const [chapterNumber, setChapterNumber] = useState(1);
+  const [chapterNumber, setChapterNumber] = useState(initialChapter);
   const [loading, setLoading] = useState(true);
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -34,10 +37,14 @@ export default function ReaderPage() {
     }
   }, [id]);
 
+  // 监听URL参数变化，同步更新章节号（用于浏览器前进/后退）
   useEffect(() => {
     const chapter = searchParams.get('chapter');
     if (chapter) {
-      setChapterNumber(parseInt(chapter));
+      const chapterNum = parseInt(chapter);
+      if (chapterNum !== chapterNumber) {
+        setChapterNumber(chapterNum);
+      }
     }
   }, [searchParams]);
 
