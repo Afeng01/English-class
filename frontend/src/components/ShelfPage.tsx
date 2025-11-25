@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BookOpen } from 'lucide-react';
+import { Search, BookOpen, Upload } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { useAppStore } from '../stores/useAppStore';
 import type { Book } from '../types';
@@ -36,7 +36,16 @@ export default function ShelfPage() {
 
   return (
     <main className="flex-grow w-full max-w-6xl mx-auto px-6 py-10">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">全部馆藏资源</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">全部图书</h2>
+        <button
+          onClick={() => navigate('/upload')}
+          className="flex items-center gap-1 text-sm text-teal-700 hover:underline transition-colors"
+        >
+          <Upload className="w-4 h-4" />
+          <span>上传书籍</span>
+        </button>
+      </div>
 
       <div className="flex gap-6">
         <aside className="w-64 flex-shrink-0 hidden md:block">

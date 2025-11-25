@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lightbulb, BookOpen, CheckCircle, Clock, BookMarked } from 'lucide-react';
+import { Lightbulb, BookOpen, CheckCircle, Clock, BookMarked, Plus } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { progressStorage } from '../services/storage';
 import { useAppStore } from '../stores/useAppStore';
@@ -92,46 +92,105 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
         </div>
       </header>
 
-      {isLoggedIn && recentBook && (
+      {isLoggedIn && (
         <section className="w-full max-w-6xl mx-auto px-6 mb-12">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="text-teal-600 w-5 h-5" />
-            <h2 className="text-lg font-bold text-gray-800">最近阅读</h2>
-          </div>
-          <div
-            className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex gap-6 hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handleBookClick(recentBook)}
-          >
-            <div className="w-24 h-32 bg-indigo-100 rounded flex-shrink-0 flex items-center justify-center text-indigo-300 overflow-hidden">
-              {recentBook.cover ? (
-                <img src={recentBook.cover} alt={recentBook.title} className="w-full h-full object-cover" />
-              ) : (
-                <BookOpen className="w-12 h-12" />
-              )}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Clock className="text-teal-600 w-5 h-5" />
+              <h2 className="text-lg font-bold text-gray-800">继续阅读</h2>
             </div>
-            <div className="flex flex-col justify-center flex-grow">
-              <div className="flex justify-between items-start">
-                <div>
+            <button
+              onClick={() => navigate('/shelf')}
+              className="text-sm text-teal-700 hover:underline"
+            >
+              查看全部
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 第一本书 */}
+            {recentBook && (
+              <div
+                className="bg-white p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 cursor-pointer flex gap-4"
+                onClick={() => handleBookClick(recentBook)}
+              >
+                {/* 左侧封面 */}
+                <div className="w-20 h-28 bg-blue-100 rounded-md flex items-center justify-center text-blue-400 flex-shrink-0 overflow-hidden relative">
+                  {recentBook.cover ? (
+                    <img src={recentBook.cover} alt={recentBook.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <BookOpen className="w-10 h-10" />
+                  )}
                   {recentBook.level && (
-                    <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
+                    <span className="absolute top-0 left-0 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-br">
                       {recentBook.level}
                     </span>
                   )}
-                  <h3 className="font-serif text-xl font-bold text-gray-800 mt-1">{recentBook.title}</h3>
-                  <p className="text-sm text-gray-500">{recentBook.author || '未知作者'}</p>
                 </div>
-                <button className="text-sm text-teal-700 hover:underline">继续阅读 &rarr;</button>
+                {/* 右侧信息 */}
+                <div className="flex flex-col justify-between w-full">
+                  <div>
+                    <h3 className="font-bold text-gray-800 font-serif text-lg">{recentBook.title}</h3>
+                    <p className="text-xs text-gray-500 mt-1">{recentBook.author || '未知作者'}</p>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>进度</span>
+                      <span>45%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div className="bg-teal-500 h-1.5 rounded-full" style={{ width: '45%' }}></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {/* 进度条暂时使用模拟数据 */}
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>阅读进度</span>
-                  <span>35%</span>
+            )}
+
+            {/* 第二本书 */}
+            {books.length > 1 && (
+              <div
+                className="bg-white p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 cursor-pointer flex gap-4"
+                onClick={() => handleBookClick(books[1])}
+              >
+                {/* 左侧封面 */}
+                <div className="w-20 h-28 bg-amber-100 rounded-md flex items-center justify-center text-amber-400 flex-shrink-0 overflow-hidden relative">
+                  {books[1].cover ? (
+                    <img src={books[1].cover} alt={books[1].title} className="w-full h-full object-cover" />
+                  ) : (
+                    <BookOpen className="w-10 h-10" />
+                  )}
+                  {books[1].level && (
+                    <span className="absolute top-0 left-0 bg-amber-600 text-white text-xs px-1.5 py-0.5 rounded-br">
+                      {books[1].level}
+                    </span>
+                  )}
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
-                  <div className="bg-teal-500 h-2 rounded-full" style={{ width: '35%' }}></div>
+                {/* 右侧信息 */}
+                <div className="flex flex-col justify-between w-full">
+                  <div>
+                    <h3 className="font-bold text-gray-800 font-serif text-lg">{books[1].title}</h3>
+                    <p className="text-xs text-gray-500 mt-1">{books[1].author || '未知作者'}</p>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>进度</span>
+                      <span>12%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div className="bg-teal-500 h-1.5 rounded-full" style={{ width: '12%' }}></div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            )}
+
+            {/* 添加新书卡片 */}
+            <div
+              className="bg-white p-5 rounded-xl shadow-sm border border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-teal-500 hover:text-teal-600 transition-colors cursor-pointer min-h-[140px]"
+              onClick={() => navigate('/upload')}
+            >
+              <Plus className="w-8 h-8 mb-2" />
+              <span className="text-sm">从书架添加新书</span>
             </div>
           </div>
         </section>

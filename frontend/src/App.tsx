@@ -5,6 +5,7 @@ import HomePage from './components/HomePage';
 import VocabPage from './components/VocabPage';
 import ShelfPage from './components/ShelfPage';
 import ReaderPage from './components/ReaderPage';
+import UploadPage from './components/UploadPage';
 import NotFoundPage from './components/NotFoundPage';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
         <Route path="/shelf" element={<ShelfPage />} />
         <Route path="/vocab" element={<VocabPage />} />
         <Route path="/reader" element={<ReaderPage />} />
+        <Route path="/upload" element={<UploadPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>
