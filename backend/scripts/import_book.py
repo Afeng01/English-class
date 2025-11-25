@@ -95,6 +95,24 @@ def detect_chapter_type(soup, text: str) -> tuple[str, str]:
     if any(keyword in text_lower for keyword in testimonial_keywords):
         return 'testimonial', '推荐语'
 
+    # 检测附加内容（bonus、podcast、补充材料等）
+    bonus_keywords = [
+        'podcast',
+        'bonus chapter',
+        'bonus content',
+        'extra chapter',
+        'supplementary',
+        'appendix',
+        'about the author',
+        'author note',
+        'acknowledgments',
+        '附录',
+        '作者说明',
+        '补充材料'
+    ]
+    if any(keyword in text_lower for keyword in bonus_keywords):
+        return 'skip', ''
+
     # 检测广告/推广内容
     promo_keywords = [
         'visit www.',
@@ -167,6 +185,37 @@ def detect_chapter_type(soup, text: str) -> tuple[str, str]:
         return 'chapter', title_text
 
     return 'chapter', ''
+
+
+def is_substantial_chapter(text: str, min_words: int = 100) -> bool:
+    """
+    判断是否是有实质内容的章节
+    过滤掉只有一两句话的章节
+
+    Args:
+        text: 章节文本内容
+        min_words: 最少单词数，默认100
+
+    Returns:
+        True表示是有效章节，False表示应该跳过
+    """
+    # 提取单词
+    words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+    word_count = len([w for w in words if len(w) > 2])
+
+    # 检查单词数是否足够
+    if word_count < min_words:
+        return False
+
+    # 检查句子数（通过句号、问号、感叹号计数）
+    sentences = re.split(r'[.!?]+', text)
+    sentence_count = len([s for s in sentences if s.strip() and len(s.strip()) > 10])
+
+    # 至少需要3个有效句子
+    if sentence_count < 3:
+        return False
+
+    return True
 
 
 def extract_real_chapter_number(text: str) -> int:

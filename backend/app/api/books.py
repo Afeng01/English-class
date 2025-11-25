@@ -1,11 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import os
+import tempfile
+import shutil
 
 from app.models.database import get_db, Book, Chapter, BookVocabulary
 from app.schemas.schemas import BookResponse, BookDetailResponse, ChapterResponse, VocabularyResponse
 
 router = APIRouter()
+
+# 难度等级选项
+LEVEL_OPTIONS = [
+    "学前", "一年级", "二年级", "三年级", "四年级", "五年级", "六年级",
+    "初一", "初二", "初三", "高一", "高二", "高三"
+]
 
 
 @router.get("", response_model=List[BookResponse])
@@ -67,3 +76,99 @@ async def get_book_vocabulary(
         BookVocabulary.book_id == book_id
     ).order_by(BookVocabulary.frequency.desc()).limit(limit).all()
     return vocabulary
+
+
+@router.get("/levels/options")
+async def get_level_options():
+    """获取难度等级选项列表"""
+    return {"levels": LEVEL_OPTIONS}
+
+
+@router.post("/upload")
+async def upload_book(
+    file: UploadFile = File(..., description="EPUB文件"),
+    level: str = Form(..., description="难度等级"),
+    db: Session = Depends(get_db)
+):
+    """
+    上传EPUB书籍
+
+    - **file**: EPUB格式的电子书文件
+    - **level**: 难度等级（如：学前、一年级、初一等）
+    """
+    # 验证文件类型
+    if not file.filename.lower().endswith('.epub'):
+        raise HTTPException(status_code=400, detail="只支持EPUB格式的文件")
+
+    # 验证难度等级
+    if level not in LEVEL_OPTIONS:
+        raise HTTPException(status_code=400, detail=f"无效的难度等级，可选值：{', '.join(LEVEL_OPTIONS)}")
+
+    # 保存上传的文件到临时目录
+    temp_dir = tempfile.mkdtemp()
+    temp_path = os.path.join(temp_dir, file.filename)
+
+    try:
+        # 写入临时文件
+        with open(temp_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+
+        # 导入书籍
+        from scripts.import_book import import_epub
+        book_id = import_epub(temp_path, level)
+
+        # 获取导入的书籍信息
+        book = db.query(Book).filter(Book.id == book_id).first()
+
+        return {
+            "success": True,
+            "message": "书籍上传成功",
+            "book": {
+                "id": book.id,
+                "title": book.title,
+                "author": book.author,
+                "level": book.level,
+                "word_count": book.word_count,
+                "chapter_count": len(book.chapters)
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导入书籍失败：{str(e)}")
+
+    finally:
+        # 清理临时文件
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+
+
+@router.delete("/{book_id}")
+async def delete_book(book_id: str, db: Session = Depends(get_db)):
+    """删除书籍"""
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="书籍不存在")
+
+    try:
+        # 删除相关的章节
+        db.query(Chapter).filter(Chapter.book_id == book_id).delete()
+
+        # 删除相关的词汇
+        db.query(BookVocabulary).filter(BookVocabulary.book_id == book_id).delete()
+
+        # 删除书籍图片目录
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        images_dir = os.path.join(backend_dir, "data", "images", book_id)
+        if os.path.exists(images_dir):
+            shutil.rmtree(images_dir)
+
+        # 删除书籍记录
+        db.delete(book)
+        db.commit()
+
+        return {"success": True, "message": "书籍删除成功"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除书籍失败：{str(e)}")

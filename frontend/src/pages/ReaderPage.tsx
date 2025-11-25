@@ -20,7 +20,11 @@ export default function ReaderPage() {
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const { settings, updateSetting, addWord, vocabulary } = useAppStore();
+  // 沉浸式工具栏状态
+  const [showToolbar, setShowToolbar] = useState(true);
+  const hideToolbarTimer = useRef<number | null>(null);
+
+  const { settings, updateSetting, addWord } = useAppStore();
 
   // 词典弹窗
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -53,6 +57,37 @@ export default function ReaderPage() {
       loadChapter(id, chapterNumber);
     }
   }, [id, chapterNumber]);
+
+  // 沉浸式工具栏：监听鼠标移动
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // 鼠标在顶部100px区域时显示工具栏
+      if (e.clientY < 100) {
+        setShowToolbar(true);
+        // 清除之前的定时器
+        if (hideToolbarTimer.current) {
+          clearTimeout(hideToolbarTimer.current);
+        }
+      } else {
+        // 鼠标离开顶部区域，3秒后隐藏工具栏
+        if (hideToolbarTimer.current) {
+          clearTimeout(hideToolbarTimer.current);
+        }
+        hideToolbarTimer.current = window.setTimeout(() => {
+          setShowToolbar(false);
+        }, 3000);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (hideToolbarTimer.current) {
+        clearTimeout(hideToolbarTimer.current);
+      }
+    };
+  }, []);
 
   const loadBook = async (bookId: string) => {
     try {
@@ -215,10 +250,10 @@ export default function ReaderPage() {
   };
 
   const fontSizes = {
-    small: '14px',
-    medium: '16px',
-    large: '18px',
-    xlarge: '20px',
+    small: '16px',
+    medium: '18px',
+    large: '20px',
+    xlarge: '22px',
   };
 
   const themes = {
@@ -233,20 +268,27 @@ export default function ReaderPage() {
 
   return (
     <div className={`min-h-screen ${themes[settings.theme].bg} ${themes[settings.theme].text}`}>
-      {/* Top toolbar */}
-      <header className="sticky top-0 z-10 bg-white/95 dark:bg-gray-800/95 backdrop-blur border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => navigate(`/books/${id}`)} className="text-gray-600 hover:text-gray-900 flex-shrink-0">
+      {/* Top toolbar - 沉浸式：自动隐藏 */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50 transition-transform duration-300 ease-in-out ${
+          showToolbar ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => navigate(`/books/${id}`)}
+            className="text-gray-600 hover:text-gray-900 dark:hover:text-gray-100 flex-shrink-0 transition-colors duration-200 font-medium"
+          >
             ← 返回
           </button>
 
           <div className="flex-1 text-center px-4 min-w-0">
-            <div className="font-medium truncate">{book.title}</div>
-            <div className="text-gray-500 text-sm flex items-center justify-center gap-3">
-              <span>{chapterNumber} / {book.chapters.length}</span>
+            <div className="font-semibold text-base truncate text-gray-900 dark:text-gray-100">{book.title}</div>
+            <div className="text-gray-500 dark:text-gray-400 text-sm flex items-center justify-center gap-3 mt-1">
+              <span>第 {chapterNumber} 章 / 共 {book.chapters.length} 章</span>
               {currentChapter && currentChapter.word_count > 0 && (
-                <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs">
-                  {currentChapter.word_count} 词
+                <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                  {currentChapter.word_count.toLocaleString()} 词
                 </span>
               )}
             </div>
@@ -255,42 +297,73 @@ export default function ReaderPage() {
           <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={() => setShowToc(!showToc)}
-              className="px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 font-medium text-sm"
             >
-              目录
+              📚 目录
             </button>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 font-medium text-sm"
             >
-              设置
+              ⚙️ 设置
             </button>
           </div>
         </div>
       </header>
 
-      <div className="flex max-w-7xl mx-auto">
-        {/* Sidebar TOC */}
+      {/* 主内容区域 - 添加顶部间距以避免被工具栏遮挡 */}
+      <div className="flex max-w-7xl mx-auto pt-20">
+        {/* Sidebar TOC - macOS 风格 */}
         {showToc && (
-          <aside className="w-64 border-r border-gray-200 dark:border-gray-700 h-[calc(100vh-60px)] overflow-y-auto sticky top-[60px]">
-            <div className="p-4">
-              <h3 className="font-bold mb-4">目录</h3>
-              <div className="space-y-1">
+          <aside className="w-72 bg-[#F5F5F5] dark:bg-gray-800 border-r border-gray-200/60 dark:border-gray-700 h-[calc(100vh-80px)] overflow-y-auto sticky top-20">
+            <div className="p-6">
+              {/* 标题 */}
+              <h3 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 px-2">
+                目录
+              </h3>
+
+              {/* 章节列表 */}
+              <div className="space-y-0.5">
                 {book.chapters.map((chapter) => (
                   <button
                     key={chapter.id}
                     onClick={() => goToChapter(chapter.chapter_number)}
-                    className={`w-full text-left px-3 py-2 rounded text-sm ${
+                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 group ${
                       chapter.chapter_number === chapterNumber
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                        ? 'bg-[#E5E5E5] dark:bg-gray-700 shadow-sm'
+                        : 'hover:bg-white/60 dark:hover:bg-gray-700/50'
                     }`}
                   >
-                    <div className="font-medium">
-                      {chapter.chapter_number}. {chapter.title || `Chapter ${chapter.chapter_number}`}
+                    {/* 章节标题和页码 */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm leading-snug ${
+                          chapter.chapter_number === chapterNumber
+                            ? 'font-semibold text-gray-900 dark:text-gray-100'
+                            : 'font-medium text-gray-700 dark:text-gray-300'
+                        }`}>
+                          <span className="text-gray-400 dark:text-gray-500 font-normal mr-1.5">
+                            {chapter.chapter_number}.
+                          </span>
+                          <span className="line-clamp-2">
+                            {chapter.title || `Chapter ${chapter.chapter_number}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 页码右对齐 */}
+                      {chapter.word_count > 0 && (
+                        <div className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 font-medium tabular-nums">
+                          {Math.ceil(chapter.word_count / 250)}
+                        </div>
+                      )}
                     </div>
+
+                    {/* 字数统计（悬浮时显示） */}
                     {chapter.word_count > 0 && (
-                      <div className="text-xs text-gray-400 mt-0.5">{chapter.word_count} 词</div>
+                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {chapter.word_count.toLocaleString()} 词
+                      </div>
                     )}
                   </button>
                 ))}
@@ -299,49 +372,71 @@ export default function ReaderPage() {
           </aside>
         )}
 
-        {/* Main content */}
-        <main className="flex-1 px-8 py-12">
+        {/* Main content - 优化阅读体验 */}
+        <main className="flex-1 px-12 py-16">
           {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="text-center py-20">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+              <p className="mt-6 text-gray-500 dark:text-gray-400">加载中...</p>
             </div>
           ) : (
             <>
-              {/* Chapter title */}
+              {/* Chapter title - 更大更突出 */}
               {currentChapter?.title && (
-                <h2 className="text-2xl font-bold mb-8 text-center">
-                  {chapterNumber}. {currentChapter.title}
+                <h2 className="text-4xl font-bold mb-12 text-center leading-tight">
+                  <span className="text-gray-400 dark:text-gray-500 font-normal">{chapterNumber}.</span>{' '}
+                  {currentChapter.title}
                 </h2>
               )}
 
-              {/* Content */}
-              <div
-                ref={contentRef}
-                onClick={handleWordClick}
-                className="prose prose-lg max-w-4xl mx-auto cursor-text select-text"
-                style={{
-                  fontSize: fontSizes[settings.font_size],
-                  lineHeight: settings.line_height,
-                }}
-                dangerouslySetInnerHTML={{ __html: currentChapter?.content || '' }}
-              />
+              {/* Content - 更大的页边距和更舒适的排版 */}
+              <div className="relative">
+                <div
+                  ref={contentRef}
+                  onClick={handleWordClick}
+                  className="prose prose-xl max-w-5xl mx-auto cursor-text select-text prose-p:leading-relaxed prose-p:mb-6 prose-headings:font-bold prose-headings:tracking-tight"
+                  style={{
+                    fontSize: fontSizes[settings.font_size],
+                    lineHeight: settings.line_height,
+                    maxWidth: '900px', // 限制最大宽度，优化阅读舒适度
+                  }}
+                  dangerouslySetInnerHTML={{ __html: currentChapter?.content || '' }}
+                />
 
-              {/* Navigation */}
-              <div className="flex justify-between items-center mt-12 max-w-4xl mx-auto">
+                {/* 页码指示器 - macOS 风格（底部居中）*/}
+                {currentChapter && (
+                  <div className="flex items-center justify-center gap-6 mt-16 mb-8 text-sm text-gray-400 dark:text-gray-500">
+                    <span className="font-medium">
+                      第 {chapterNumber} 章 / 共 {book.chapters.length} 章
+                    </span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                    <span>
+                      本章约 {currentChapter.word_count > 0 ? Math.ceil(currentChapter.word_count / 250) : 1} 页
+                    </span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                    <span>
+                      {currentChapter.word_count.toLocaleString()} 词
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Navigation - 优化按钮样式 */}
+              <div className="flex justify-between items-center mt-20 mb-12 max-w-5xl mx-auto" style={{ maxWidth: '900px' }}>
                 <button
                   onClick={prevChapter}
                   disabled={chapterNumber === 1}
-                  className="px-6 py-2 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-8 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
                 >
                   ← 上一章
                 </button>
-                <span className="text-gray-500">
-                  {chapterNumber} / {book.chapters.length}
+                <span className="text-gray-400 dark:text-gray-500 text-sm font-medium">
+                  第 {chapterNumber} 章 / 共 {book.chapters.length} 章
                 </span>
                 <button
                   onClick={nextChapter}
                   disabled={chapterNumber === book.chapters.length}
-                  className="px-6 py-2 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-8 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
                 >
                   下一章 →
                 </button>

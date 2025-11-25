@@ -1,286 +1,378 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { booksAPI } from '../services/api';
-import type { Book } from '../types';
-import { progressStorage } from '../services/storage';
-import { Navigation, Button, Card, Hero } from '../components';
 import { useAppStore } from '../stores/useAppStore';
+import { Navigation, Footer } from '../components';
+import * as Icons from '@phosphor-icons/react';
+
+// 名言数据
+const quotes = [
+  {
+    content: (
+      <>
+        "We acquire language in one way and only one way:{' '}
+        <span className="text-emerald-700 font-semibold border-b-4 border-emerald-200">
+          when we understand messages.
+        </span>"
+      </>
+    ),
+    author: 'Stephen Krashen',
+  },
+  {
+    content: (
+      <>
+        "Language is not taught,{' '}
+        <span className="text-emerald-700 font-semibold border-b-4 border-emerald-200">
+          it is acquired.
+        </span>"
+      </>
+    ),
+    author: 'Stephen Krashen',
+  },
+];
+
+type FilterMode = 'cn' | 'us' | 'lexile';
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const [recentBooks, setRecentBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [filterMode, setFilterMode] = useState<FilterMode>('cn');
   const { vocabulary } = useAppStore();
 
+  // 名言轮播
   useEffect(() => {
-    loadRecentBooks();
+    const interval = setInterval(() => {
+      setQuoteIndex((prev) => (prev + 1) % quotes.length);
+    }, 6000);
+    return () => clearInterval(interval);
   }, []);
 
-  const loadRecentBooks = async () => {
-    try {
-      setLoading(true);
-      const response = await booksAPI.getBooks();
-      const allBooks = response.data;
-
-      const progress = progressStorage.getAll();
-      const progressList = Object.values(progress);
-
-      const sorted = progressList
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-        .slice(0, 4)
-        .map((p) => allBooks.find((b) => b.id === p.book_id))
-        .filter(Boolean) as Book[];
-
-      setRecentBooks(sorted);
-    } catch (error) {
-      console.error('Failed to load recent books:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 统计数据
-  const stats = {
-    level: '小学三年级',
-    booksRead: Object.keys(progressStorage.getAll()).length,
-    vocabularyCount: vocabulary.length,
-  };
-
   return (
-    <div className="min-h-screen bg-[var(--color-bg-subtle)]">
+    <div className="min-h-screen flex flex-col bg-[#FFFCF7]">
       {/* 导航栏 */}
-      <Navigation
-        links={[
-          { label: '书库', path: '/books' },
-          { label: '词库', path: '/vocabulary' },
-          { label: '个人中心', path: '/profile' },
-        ]}
-      />
+      <Navigation />
 
-      {/* Hero 区域 - 苹果式巨大标题 */}
-      <Hero
-        background="gradient"
-        size="lg"
-        title={
-          <>
-            通过阅读原著
-            <br />
-            <span className="gradient-text">提升英语能力</span>
-          </>
-        }
-        subtitle="分级书籍 · 沉浸式阅读 · 即时查词 · 词汇积累"
-        cta={
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => navigate('/books')}
-            className="text-lg px-10 py-5"
-          >
-            开始阅读
-          </Button>
-        }
-      />
+      <main className="flex-1">
+        {/* 核心引导区 - Hero */}
+        <section id="hero" className="bg-gradient-to-b from-[#F2ECE4] to-[#FBF9F5] border-b border-[#EAE0D7]">
+          <div className="max-w-screen-xl mx-auto px-6 py-16 grid gap-12 lg:grid-cols-2 lg:items-center">
+            {/* 左侧内容 */}
+            <div className="space-y-10">
+              {/* 标签 */}
+              <p className="uppercase text-xs tracking-[0.35em] text-emerald-700">
+                COMPREHENSIBLE INPUT
+              </p>
 
-      {/* 统计数据 - 苹果式卡片网格 */}
-      <section className="py-20 px-6 bg-white">
-        <div className="container-section">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Card
-              variant="elevated"
-              elevation="md"
-              hoverable
-              className="text-center group py-8"
-            >
-              <div className="space-y-4">
-                <div className="text-xs uppercase tracking-widest text-[var(--color-text-tertiary)] font-semibold">
-                  当前等级
+              {/* 名言轮播 */}
+              <div className="relative min-h-[180px]">
+                {quotes.map((quote, index) => (
+                  <div
+                    key={index}
+                    className={`absolute inset-0 flex flex-col justify-center transition-all duration-700 ${
+                      quoteIndex === index
+                        ? 'opacity-100 translate-y-0'
+                        : 'opacity-0 translate-y-3 pointer-events-none'
+                    }`}
+                  >
+                    <h1 className="font-serif text-4xl lg:text-5xl font-light leading-tight text-gray-900">
+                      {quote.content}
+                    </h1>
+                    <p className="mt-4 text-lg text-gray-500">— {quote.author}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 简介文字 */}
+              <p className="text-base text-gray-600 leading-relaxed">
+                ReadAcquire 倡导"可理解输入"，用持续阅读、语块感知和沉浸式理解帮助学习者自然习得英语。
+                每一次翻页都记录成长，数据面板同步反馈进度与词汇增量。
+              </p>
+
+              {/* 三个按钮 */}
+              <div className="flex flex-wrap gap-4">
+                <button
+                  onClick={() => navigate('/books')}
+                  className="px-8 py-3 rounded-full bg-emerald-700 text-white font-semibold shadow-lg shadow-emerald-700/30 hover:bg-emerald-800 transition flex items-center gap-2"
+                >
+                  <Icons.ReadCvLogo weight="fill" />
+                  开始阅读
+                </button>
+                <button className="px-8 py-3 rounded-full bg-white border border-gray-200 text-gray-800 shadow-sm hover:border-emerald-500 hover:text-emerald-700 transition flex items-center gap-2">
+                  <Icons.Lightbulb weight="bold" />
+                  学习原理
+                </button>
+                <button
+                  onClick={() => navigate('/vocabulary')}
+                  className="px-8 py-3 rounded-full text-emerald-700 border border-transparent hover:border-emerald-100 bg-emerald-50 flex items-center gap-2 transition"
+                >
+                  <Icons.CheckCircle weight="bold" />
+                  词汇评测
+                </button>
+              </div>
+
+              {/* 四个数据卡片 */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div className="bg-white rounded-3xl p-4 shadow-sm">
+                  <p className="text-2xl font-bold text-emerald-700">328</p>
+                  <p className="text-xs text-gray-500">累计阅读天数</p>
                 </div>
-                <div className="text-5xl font-black text-[var(--color-primary)] transition-transform duration-300 group-hover:scale-110">
-                  {stats.level}
+                <div className="bg-white rounded-3xl p-4 shadow-sm">
+                  <p className="text-2xl font-bold text-emerald-700">{vocabulary.length.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">吸收词汇</p>
+                </div>
+                <div className="bg-white rounded-3xl p-4 shadow-sm">
+                  <p className="text-2xl font-bold text-emerald-700">18</p>
+                  <p className="text-xs text-gray-500">完成书籍</p>
+                </div>
+                <div className="bg-white rounded-3xl p-4 shadow-sm">
+                  <p className="text-2xl font-bold text-emerald-700">97%</p>
+                  <p className="text-xs text-gray-500">理解度</p>
                 </div>
               </div>
-            </Card>
+            </div>
 
-            <Card
-              variant="elevated"
-              elevation="md"
-              hoverable
-              className="text-center group py-8"
-            >
-              <div className="space-y-4">
-                <div className="text-xs uppercase tracking-widest text-[var(--color-text-tertiary)] font-semibold">
-                  已读书籍
+            {/* 右侧玻璃拟态卡片 */}
+            <div className="bg-white/90 backdrop-blur-sm border border-white/70 rounded-[32px] p-8 shadow-[0_25px_50px_-12px_rgba(15,118,110,0.2)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">本周阅读</p>
+                  <p className="text-3xl font-semibold text-gray-900">4 小时 28 分</p>
                 </div>
-                <div className="text-5xl font-black text-[var(--color-accent)] transition-transform duration-300 group-hover:scale-110">
-                  {stats.booksRead}
+                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs">+18%</span>
+              </div>
+              <div className="mt-8 space-y-6">
+                <div>
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>词汇吸收</span>
+                    <span>2,140/3,000</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-gray-200">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: '71%' }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>语块熟悉度</span>
+                    <span>82%</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-gray-200">
+                    <div className="h-full rounded-full bg-amber-400" style={{ width: '82%' }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>沉浸时长</span>
+                    <span>18/21 天</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-gray-200">
+                    <div className="h-full rounded-full bg-sky-400" style={{ width: '86%' }} />
+                  </div>
                 </div>
               </div>
-            </Card>
-
-            <Card
-              variant="elevated"
-              elevation="md"
-              hoverable
-              className="text-center group py-8"
-            >
-              <div className="space-y-4">
-                <div className="text-xs uppercase tracking-widest text-[var(--color-text-tertiary)] font-semibold">
-                  掌握词汇
+              <div className="mt-8 rounded-2xl bg-[#F7FBFA] border border-[#E8F3F1] p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600/10 flex items-center justify-center text-emerald-700">
+                    <Icons.Globe weight="fill" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">目标蓝思值</p>
+                    <p className="text-lg font-semibold text-gray-900">600L - 750L</p>
+                  </div>
                 </div>
-                <div className="text-5xl font-black text-[var(--color-success)] transition-transform duration-300 group-hover:scale-110">
-                  {stats.vocabularyCount}
-                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  根据近 30 天表现生成的推荐范围，帮助在可理解输入和挑战之间保持平衡。
+                </p>
               </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* 正在阅读 */}
-      {recentBooks.length > 0 && (
-        <section className="py-20 px-6 bg-[var(--color-bg-subtle)]">
-          <div className="container-section">
-            <h2 className="text-[length:var(--text-display)] font-bold mb-12 text-[var(--color-text)]">
-              正在阅读
-            </h2>
-
-            {loading ? (
-              <div className="flex justify-center items-center py-20">
-                <div className="w-10 h-10 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {recentBooks.map((book, index) => {
-                  const progress = progressStorage.get(book.id);
-                  const percentage = progress
-                    ? Math.round((progress.current_chapter / ((book as any).chapters?.length || 1)) * 100)
-                    : 0;
-
-                  return (
-                    <Card
-                      key={book.id}
-                      padding="none"
-                      hoverable
-                      elevation="md"
-                      onClick={() => navigate(`/books/${book.id}`)}
-                      className={`reveal reveal-delay-${Math.min(index + 1, 5)}`}
-                    >
-                      {/* 封面 */}
-                      <div className="aspect-[3/4] bg-gradient-to-br from-blue-100 to-indigo-100 overflow-hidden relative">
-                        {book.cover ? (
-                          <img
-                            src={book.cover}
-                            alt={book.title}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center p-6 text-center">
-                            <div>
-                              <div className="text-lg font-bold text-[var(--color-text)] mb-2">
-                                {book.title}
-                              </div>
-                              <div className="text-sm text-[var(--color-text-secondary)]">
-                                {book.author}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 阅读进度徽章 */}
-                        {percentage > 0 && (
-                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-[var(--color-primary)]">
-                            {percentage}%
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 信息 */}
-                      <div className="p-5 space-y-4">
-                        <div>
-                          <h3 className="font-semibold text-lg truncate text-[var(--color-text)]">
-                            {book.title}
-                          </h3>
-                          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                            {book.author}
-                          </p>
-                        </div>
-
-                        {/* 进度条 - 苹果式渐变 */}
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs text-[var(--color-text-tertiary)]">
-                            <span>阅读进度</span>
-                            <span className="font-medium">{percentage}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-[var(--color-bg-muted)] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] transition-all duration-700 ease-[var(--ease-out)]"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
+            </div>
           </div>
         </section>
-      )}
 
-      {/* 特性介绍 - 苹果式图标网格 */}
-      <section className="py-24 px-6 bg-white">
-        <div className="container-section">
-          <h2 className="text-[length:var(--text-display)] font-bold text-center mb-4 text-[var(--color-text)]">
-            为什么选择我们
-          </h2>
-          <p className="text-center text-[var(--color-text-secondary)] text-lg mb-16 max-w-2xl mx-auto">
-            基于科学的语言学习方法，打造沉浸式的英语阅读体验
-          </p>
+        {/* 继续阅读 */}
+        <section id="progress" className="max-w-screen-xl mx-auto px-6 py-16">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="uppercase text-xs tracking-[0.35em] text-emerald-700">KEEP GOING</p>
+              <h2 className="text-3xl font-bold mt-2">继续阅读</h2>
+              <p className="text-gray-500 text-sm mt-1">追踪多本书籍的实时进度，补全沉浸式输入闭环。</p>
+            </div>
+            <a href="#" className="text-sm text-emerald-700 flex items-center gap-1 hover:underline">
+              查看全部 <Icons.ArrowUpRight weight="bold" />
+            </a>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16">
-            {/* 特性 1 */}
-            <div className="text-center space-y-4 reveal">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-blue-100 to-blue-50 rounded-3xl flex items-center justify-center text-5xl transform transition-transform hover:scale-110 duration-300">
-                📚
+          <div className="grid gap-6 mt-10 md:grid-cols-3">
+            {/* 卡片1 */}
+            <article className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm hover:shadow-lg transition">
+              <div className="flex items-start gap-4">
+                <div className="w-20 h-28 rounded-2xl bg-gradient-to-br from-emerald-100 to-white flex items-center justify-center text-emerald-600 relative overflow-hidden">
+                  <Icons.Book weight="fill" className="text-3xl" />
+                  <span className="absolute top-0 left-0 bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-br">L2</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 text-lg">The Little Prince</h3>
+                  <p className="text-xs text-gray-500 mt-1">Antoine de Saint-Exupéry</p>
+                  <p className="text-xs text-gray-400 mt-2">章节 14 / 27</p>
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-[var(--color-text)]">科学分级</h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                根据英语难度智能分级，从学前到高中，循序渐进提升阅读能力
-              </p>
+              <div className="mt-6">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                  <span>进度</span>
+                  <span>45%</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-200">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: '45%' }} />
+                </div>
+              </div>
+            </article>
+
+            {/* 卡片2 */}
+            <article className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm hover:shadow-lg transition">
+              <div className="flex items-start gap-4">
+                <div className="w-20 h-28 rounded-2xl bg-gradient-to-br from-amber-100 to-white flex items-center justify-center text-amber-500 relative overflow-hidden">
+                  <Icons.Book weight="fill" className="text-3xl" />
+                  <span className="absolute top-0 left-0 bg-amber-500 text-white text-xs px-2 py-0.5 rounded-br">L3</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 text-lg">Flipped</h3>
+                  <p className="text-xs text-gray-500 mt-1">Wendelin Van Draanen</p>
+                  <p className="text-xs text-gray-400 mt-2">章节 4 / 34</p>
+                </div>
+              </div>
+              <div className="mt-6">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                  <span>进度</span>
+                  <span>12%</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-200">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: '12%' }} />
+                </div>
+              </div>
+            </article>
+
+            {/* 添加新书卡片 */}
+            <article className="border border-dashed border-gray-300 rounded-3xl p-6 flex flex-col items-center justify-center text-gray-400 hover:text-emerald-700 hover:border-emerald-400 transition cursor-pointer">
+              <Icons.PlusCircle weight="bold" className="text-4xl mb-3" />
+              <p className="text-sm">从书架添加新书</p>
+              <p className="text-xs text-gray-400 mt-1">同步书架即可创建沉浸计划</p>
+            </article>
+          </div>
+        </section>
+
+        {/* 习得路径 */}
+        <section id="path" className="bg-white border-y border-[#F0E8DE]">
+          <div className="max-w-screen-xl mx-auto px-6 py-16">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <p className="uppercase text-xs tracking-[0.35em] text-emerald-700">LEARNING FLOW</p>
+                <h2 className="text-3xl font-bold mt-2">习得路径</h2>
+                <p className="text-gray-500 text-sm mt-2">以输入为中心串联评测、阅读和复盘，形成正向闭环。</p>
+              </div>
+              <button className="px-6 py-3 rounded-full bg-emerald-700 text-white text-sm shadow hover:bg-emerald-800 transition">
+                下载学习计划
+              </button>
             </div>
 
-            {/* 特性 2 */}
-            <div className="text-center space-y-4 reveal reveal-delay-1">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-indigo-100 to-indigo-50 rounded-3xl flex items-center justify-center text-5xl transform transition-transform hover:scale-110 duration-300">
-                🔍
-              </div>
-              <h3 className="text-2xl font-bold text-[var(--color-text)]">即时查词</h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                点击单词即可查看释义、发音，无需打断阅读流程，保持沉浸体验
-              </p>
-            </div>
-
-            {/* 特性 3 */}
-            <div className="text-center space-y-4 reveal reveal-delay-2">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-amber-100 to-amber-50 rounded-3xl flex items-center justify-center text-5xl transform transition-transform hover:scale-110 duration-300">
-                📝
-              </div>
-              <h3 className="text-2xl font-bold text-[var(--color-text)]">词汇积累</h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                自动保存生词到个人词库，智能复习提醒，让记忆更牢固持久
-              </p>
+            <div className="grid gap-6 mt-10 md:grid-cols-3">
+              <article className="bg-white/90 backdrop-blur-sm border border-white/70 rounded-3xl p-6 shadow-[0_25px_50px_-12px_rgba(15,118,110,0.2)]">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600/15 text-emerald-700 flex items-center justify-center mb-4">
+                  <Icons.Broadcast weight="bold" />
+                </div>
+                <h3 className="text-xl font-semibold">评测初始化</h3>
+                <p className="text-sm text-gray-500 mt-2">通过词汇和语块测验确定起始蓝思段位，生成初版阅读书单。</p>
+              </article>
+              <article className="bg-white/90 backdrop-blur-sm border border-white/70 rounded-3xl p-6 shadow-[0_25px_50px_-12px_rgba(15,118,110,0.2)]">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center mb-4">
+                  <Icons.ReadCvLogo weight="bold" />
+                </div>
+                <h3 className="text-xl font-semibold">沉浸式阅读</h3>
+                <p className="text-sm text-gray-500 mt-2">在统一界面完成阅读、标注与语块收藏，进度与统计实时回写仪表盘。</p>
+              </article>
+              <article className="bg-white/90 backdrop-blur-sm border border-white/70 rounded-3xl p-6 shadow-[0_25px_50px_-12px_rgba(15,118,110,0.2)]">
+                <div className="w-12 h-12 rounded-2xl bg-sky-500/15 text-sky-600 flex items-center justify-center mb-4">
+                  <Icons.Rewind weight="bold" />
+                </div>
+                <h3 className="text-xl font-semibold">复盘与跃迁</h3>
+                <p className="text-sm text-gray-500 mt-2">结合阅读日志和语块数据输出建议，提示上调蓝思段位或切换主题域。</p>
+              </article>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Footer - 极简风格 */}
-      <footer className="py-12 px-6 text-center bg-[var(--color-bg-subtle)] border-t border-[var(--color-border-subtle)]">
-        <p className="text-sm text-[var(--color-text-tertiary)]">
-          © 2025 英语分级阅读. 让阅读成为习惯.
-        </p>
-      </footer>
+        {/* 书架资源 */}
+        <section id="library" className="max-w-screen-xl mx-auto px-6 py-16">
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="uppercase text-xs tracking-[0.35em] text-emerald-700">LIBRARY</p>
+              <h2 className="text-3xl font-bold mt-2">书架资源库</h2>
+              <p className="text-sm text-gray-500 mt-2">以不同体系筛选目标材料，平衡兴趣与难度。</p>
+            </div>
+
+            <div className="bg-white border border-gray-100 rounded-3xl shadow-sm px-4 py-2 flex flex-wrap gap-2 text-sm font-medium">
+              <button
+                onClick={() => setFilterMode('cn')}
+                className={`px-6 py-2 rounded-full transition ${
+                  filterMode === 'cn' ? 'bg-emerald-600 text-white' : 'bg-transparent text-gray-500'
+                }`}
+              >
+                中国年级
+              </button>
+              <button
+                onClick={() => setFilterMode('us')}
+                className={`px-6 py-2 rounded-full transition ${
+                  filterMode === 'us' ? 'bg-emerald-600 text-white' : 'bg-transparent text-gray-500'
+                }`}
+              >
+                美国年级
+              </button>
+              <button
+                onClick={() => setFilterMode('lexile')}
+                className={`px-6 py-2 rounded-full transition ${
+                  filterMode === 'lexile' ? 'bg-emerald-600 text-white' : 'bg-transparent text-gray-500'
+                }`}
+              >
+                蓝思值
+              </button>
+            </div>
+
+            <div className="bg-white border border-gray-100 rounded-3xl shadow-sm p-8">
+              {filterMode === 'cn' && (
+                <div className="flex flex-wrap gap-3">
+                  <button className="px-5 py-2 rounded-full bg-emerald-600 text-white text-sm">全部</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">小学 1-3 年级</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">小学 4-6 年级</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">初中 1 年级</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">初中 2-3 年级</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">高中 / 大学</button>
+                </div>
+              )}
+
+              {filterMode === 'us' && (
+                <div className="flex flex-wrap gap-3">
+                  <button className="px-5 py-2 rounded-full bg-emerald-600 text-white text-sm">All</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">Pre-K</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">Grade 1-3</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">Grade 4-6</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">Middle School</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">High School</button>
+                </div>
+              )}
+
+              {filterMode === 'lexile' && (
+                <div className="flex flex-wrap gap-3">
+                  <button className="px-5 py-2 rounded-full bg-emerald-600 text-white text-sm">All</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">0L - 200L</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">200L - 500L</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">500L - 800L</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">800L - 1000L</button>
+                  <button className="px-5 py-2 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-sm hover:border-emerald-500">1000L+</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* 页脚 */}
+      <Footer />
     </div>
   );
 }

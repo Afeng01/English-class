@@ -101,7 +101,7 @@ export const settingsStorage = {
   },
 
   // 更新单个设置
-  update: (key: keyof ReaderSettings, value: any): void => {
+  update: <K extends keyof ReaderSettings>(key: K, value: ReaderSettings[K]): void => {
     const settings = settingsStorage.get();
     settings[key] = value;
     settingsStorage.save(settings);

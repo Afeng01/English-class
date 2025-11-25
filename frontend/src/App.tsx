@@ -1,59 +1,44 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import HomePage from './pages/HomePage';
-import BooksPage from './pages/BooksPage';
-import BookDetailPage from './pages/BookDetailPage';
-import ReaderPage from './pages/ReaderPage';
-import VocabularyPage from './pages/VocabularyPage';
-import { useAppStore } from './stores/useAppStore';
+import { useState } from 'react';
+import Navigation from './components/Navigation';
+import HomePage from './components/HomePage';
+import VocabPage from './components/VocabPage';
+import ShelfPage from './components/ShelfPage';
+import ReaderPage from './components/ReaderPage';
+
+type Page = 'home' | 'shelf' | 'vocab' | 'reader';
 
 function App() {
-  const { loadVocabulary, loadSettings } = useAppStore();
+  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
 
-  useEffect(() => {
-    // 初始化加载本地数据
-    loadVocabulary();
-    loadSettings();
-  }, [loadVocabulary, loadSettings]);
-
-  useEffect(() => {
-    // 滚动触发动画 - Intersection Observer
-    const observerOptions = {
-      root: null,
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px',
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-          // 一次性动画，观察后即移除
-          observer.unobserve(entry.target);
-        }
-      });
-    }, observerOptions);
-
-    // 观察所有带有 .reveal 类的元素
-    const revealElements = document.querySelectorAll('.reveal');
-    revealElements.forEach((el) => observer.observe(el));
-
-    return () => {
-      revealElements.forEach((el) => observer.unobserve(el));
-    };
-  }, []);
+  const toggleLogin = () => {
+    setIsLoggedIn(!isLoggedIn);
+  };
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/books" element={<BooksPage />} />
-        <Route path="/books/:id" element={<BookDetailPage />} />
-        <Route path="/reader/:id" element={<ReaderPage />} />
-        <Route path="/vocabulary" element={<VocabularyPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="min-h-screen bg-[#F9F7F2] text-gray-800 flex flex-col">
+      <Navigation
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        isLoggedIn={isLoggedIn}
+        onToggleLogin={toggleLogin}
+      />
+
+      {currentPage === 'home' && (
+        <HomePage
+          isLoggedIn={isLoggedIn}
+          onNavigate={setCurrentPage}
+        />
+      )}
+
+      {currentPage === 'vocab' && <VocabPage />}
+
+      {currentPage === 'shelf' && <ShelfPage />}
+
+      {currentPage === 'reader' && (
+        <ReaderPage onNavigate={setCurrentPage} />
+      )}
+    </div>
   );
 }
 

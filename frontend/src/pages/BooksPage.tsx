@@ -51,23 +51,32 @@ export default function BooksPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg-subtle)]">
       {/* 导航栏 */}
-      <Navigation
-        links={[
-          { label: '首页', path: '/' },
-          { label: '词库', path: '/vocabulary' },
-          { label: '个人中心', path: '/profile' },
-        ]}
-      />
+      <Navigation />
 
       {/* Hero Header */}
       <section className="py-20 px-6 bg-white border-b border-[var(--color-border-subtle)]">
         <div className="container-wide">
-          <h1 className="text-[length:var(--text-display)] font-black text-[var(--color-text)] mb-6">
-            图书馆
-          </h1>
-          <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl leading-relaxed">
-            精心挑选的英语原著，科学分级，循序渐进提升阅读能力
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <h1 className="text-[length:var(--text-display)] font-black text-[var(--color-text)] mb-4">
+                图书馆
+              </h1>
+              <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl leading-relaxed">
+                精心挑选的英语原著，科学分级，循序渐进提升阅读能力
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => navigate('/upload')}
+              className="flex items-center gap-2 whitespace-nowrap"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              上传书籍
+            </Button>
+          </div>
         </div>
       </section>
 
