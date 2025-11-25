@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lightbulb, BookOpen, CheckCircle, Clock, BookMarked } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { progressStorage } from '../services/storage';
 import { useAppStore } from '../stores/useAppStore';
 import type { Book } from '../types';
 
-type Page = 'home' | 'shelf' | 'vocab' | 'reader';
 type FilterMode = 'cn' | 'us' | 'lexile';
 
 interface HomePageProps {
   isLoggedIn: boolean;
-  onNavigate: (page: Page) => void;
 }
 
-export default function HomePage({ isLoggedIn, onNavigate }: HomePageProps) {
+export default function HomePage({ isLoggedIn }: HomePageProps) {
+  const navigate = useNavigate();
   const [filterMode, setFilterMode] = useState<FilterMode>('cn');
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ export default function HomePage({ isLoggedIn, onNavigate }: HomePageProps) {
 
   const handleBookClick = (book: Book) => {
     setCurrentBook(book);
-    onNavigate('reader');
+    navigate('/reader');
   };
 
   return (
@@ -80,7 +80,7 @@ export default function HomePage({ isLoggedIn, onNavigate }: HomePageProps) {
           </button>
           <button
             className="px-8 py-2.5 rounded-lg bg-teal-700 text-white shadow-lg hover:bg-teal-800 hover:-translate-y-0.5 transition-all text-base font-medium"
-            onClick={() => onNavigate('reader')}
+            onClick={() => navigate('/reader')}
           >
             <BookOpen className="inline w-5 h-5 mr-2" />
             开始阅读

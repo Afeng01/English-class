@@ -1,17 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Type, List, Plus, Loader2, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { booksAPI, dictionaryAPI } from '../services/api';
 import { progressStorage, vocabularyStorage } from '../services/storage';
 import type { Chapter, DictionaryResult } from '../types';
 
-type Page = 'home' | 'shelf' | 'vocab' | 'reader';
-
-interface ReaderPageProps {
-  onNavigate: (page: Page) => void;
-}
-
-export default function ReaderPage({ onNavigate }: ReaderPageProps) {
+export default function ReaderPage() {
+  const navigate = useNavigate();
   const currentBook = useAppStore(state => state.currentBook);
   const addWord = useAppStore(state => state.addWord);
 
@@ -148,7 +144,7 @@ export default function ReaderPage({ onNavigate }: ReaderPageProps) {
         <AlertCircle className="w-16 h-16 text-gray-400 mb-4" />
         <p className="text-gray-600">请先选择一本书籍</p>
         <button
-          onClick={() => onNavigate('shelf')}
+          onClick={() => navigate('/shelf')}
           className="mt-4 px-6 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
         >
           前往书架
@@ -162,7 +158,7 @@ export default function ReaderPage({ onNavigate }: ReaderPageProps) {
       <div className="h-14 border-b border-[#EAE4D6] flex items-center justify-between px-6 bg-[#FDFBF7] sticky top-0 z-40">
         <button
           className="text-gray-500 hover:text-teal-700 flex items-center gap-1"
-          onClick={() => onNavigate('home')}
+          onClick={() => navigate('/')}
         >
           <ArrowLeft className="w-4 h-4" /> <span className="text-sm">返回</span>
         </button>

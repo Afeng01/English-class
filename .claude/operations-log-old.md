@@ -1067,3 +1067,276 @@ const goToNextChapter = () => {
 **项目状态**: 🚀 前后端完全打通，核心功能全部实现，可以正常使用
 
 ---
+
+## 操作日志 - 实现前端路由系统
+
+**执行时间**: 2025-11-25 
+**执行者**: Claude Code
+**任务ID**: frontend-routing-implementation
+
+---
+
+### ✅ 任务完成摘要
+
+用户发现点击前端页面上的任何按钮，URL都不会发生变化。成功实现真正的前端路由，使不同页面有独立的URL。
+
+#### 已完成的工作
+
+1. **✅ 安装react-router-dom依赖**
+   - 版本：react-router-dom (最新版)
+   - 添加了4个包
+
+2. **✅ 配置路由上下文** - [frontend/src/main.tsx:3,9-11](../frontend/src/main.tsx#L3,L9-L11)
+   - 导入BrowserRouter
+   - 使用BrowserRouter包裹App组件
+   - 提供路由上下文
+
+3. **✅ 重构App.tsx** - [frontend/src/App.tsx](../frontend/src/App.tsx)
+   - 移除useState('currentPage')状态管理
+   - 用Routes和Route替换条件渲染
+   - 配置路由表（/, /shelf, /vocab, /reader, *）
+   - 移除Navigation组件的currentPage和onNavigate props
+
+4. **✅ 重构Navigation组件** - [frontend/src/components/Navigation.tsx](../frontend/src/components/Navigation.tsx)
+   - 使用Link组件替换button
+   - 使用useLocation hook获取当前路径
+   - 移除currentPage和onNavigate props
+   - 根据路径动态高亮当前页
+
+5. **✅ 更新所有页面组件**
+   - HomePage: 使用useNavigate替换onNavigate prop
+   - ShelfPage: 使用useNavigate替换onNavigate prop  
+   - ReaderPage: 使用useNavigate替换onNavigate prop
+
+6. **✅ 创建404页面** - [frontend/src/components/NotFoundPage.tsx](../frontend/src/components/NotFoundPage.tsx)
+   - 友好的404错误提示
+   - "返回首页"按钮
+
+---
+
+### 路由配置详情
+
+#### 路由表
+
+| 路径 | 组件 | 说明 |
+|-----|------|------|
+| `/` | HomePage | 首页 |
+| `/shelf` | ShelfPage | 书架页面 |
+| `/vocab` | VocabPage | 词库页面 |
+| `/reader` | ReaderPage | 阅读器页面 |
+| `*` | NotFoundPage | 404页面 |
+
+#### 导航方式
+
+**声明式导航**（Navigation组件）：
+```tsx
+<Link to="/shelf" className={currentPath === '/shelf' ? 'active' : ''}>
+  书架
+</Link>
+```
+
+**编程式导航**（页面组件）：
+```tsx
+const navigate = useNavigate();
+// ...
+navigate('/reader');  // 跳转到阅读器页面
+```
+
+---
+
+### 技术实现
+
+#### 1. BrowserRouter配置 (main.tsx)
+
+```tsx
+import { BrowserRouter } from 'react-router-dom';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>
+);
+```
+
+#### 2. Routes配置 (App.tsx)
+
+```tsx
+import { Routes, Route } from 'react-router-dom';
+
+<Routes>
+  <Route path="/" element={<HomePage isLoggedIn={isLoggedIn} />} />
+  <Route path="/shelf" element={<ShelfPage />} />
+  <Route path="/vocab" element={<VocabPage />} />
+  <Route path="/reader" element={<ReaderPage />} />
+  <Route path="*" element={<NotFoundPage />} />
+</Routes>
+```
+
+#### 3. 导航链接 (Navigation.tsx)
+
+```tsx
+import { Link, useLocation } from 'react-router-dom';
+
+const location = useLocation();
+const currentPath = location.pathname;
+
+<Link to="/shelf" className={currentPath === '/shelf' ? 'active' : ''}>
+  <Book className="w-4 h-4" /> 书架
+</Link>
+```
+
+#### 4. 编程式导航 (页面组件)
+
+```tsx
+import { useNavigate } from 'react-router-dom';
+
+const navigate = useNavigate();
+
+const handleBookClick = (book: Book) => {
+  setCurrentBook(book);
+  navigate('/reader');  // 跳转到阅读器
+};
+```
+
+---
+
+### 修改文件清单
+
+| 文件 | 修改类型 | 说明 |
+|-----|---------|------|
+| frontend/package.json | 更新 | 添加react-router-dom依赖 |
+| frontend/src/main.tsx | 修改 | 添加BrowserRouter包裹 |
+| frontend/src/App.tsx | 重构 | 移除状态管理，使用Routes配置路由 |
+| frontend/src/components/Navigation.tsx | 重构 | 使用Link和useLocation |
+| frontend/src/components/HomePage.tsx | 更新 | 使用useNavigate |
+| frontend/src/components/ShelfPage.tsx | 更新 | 使用useNavigate |
+| frontend/src/components/ReaderPage.tsx | 更新 | 使用useNavigate |
+| frontend/src/components/NotFoundPage.tsx | 新建 | 404页面组件 |
+
+---
+
+### 验证结果
+
+#### 构建测试
+```bash
+npm run build
+```
+✓ 构建成功
+✓ 产物大小：246.80 kB (gzip: 81.23 kB)
+✓ 无构建错误
+
+#### 功能验证
+✓ 所有路由配置正确
+✓ URL正确变化（/, /shelf, /vocab, /reader）
+✓ 导航组件Link跳转正常
+✓ 编程式导航useNavigate正常
+✓ 404页面配置正确
+✓ 浏览器前进后退按钮支持
+
+---
+
+### 技术优势
+
+#### 1. URL独立性
+- 每个页面有独立URL
+- 可以直接访问特定页面
+- 支持页面分享和书签
+
+#### 2. 浏览器兼容性
+- 支持浏览器前进后退按钮
+- 符合Web标准
+
+#### 3. 状态独立性
+- Zustand全局状态独立于路由
+- currentBook等状态在路由切换时保持不变
+
+#### 4. 代码清晰度
+- 移除了状态驱动的条件渲染
+- 改用声明式路由配置
+- 导航逻辑更清晰
+
+---
+
+### 数据流示意图
+
+```
+用户操作：
+   |
+   v
+Link点击/navigate() → 路由变化
+   |                      |
+   v                      v
+URL变化              组件切换
+   |                      |
+   +---→ 浏览器历史记录 ←---+
+   |
+   v
+支持前进后退
+```
+
+---
+
+### 遵循的原则
+
+1. **最小化改动** ✅
+   - 仅修改必要的路由相关代码
+   - 保持UI组件逻辑不变
+   - 保持样式完全一致
+
+2. **状态管理独立** ✅
+   - Zustand store完全保持不变
+   - localStorage管理保持不变
+   - 全局状态不受路由影响
+
+3. **无破坏性更改** ✅
+   - 所有现有功能正常工作
+   - 构建测试通过
+   - 无TypeScript错误
+
+---
+
+### 遗留问题
+
+**src/pages/目录TypeScript错误**：
+- 现状：pages目录下有旧文件存在TypeScript错误
+- 影响：不影响运行（未被使用）
+- 建议：后续清理或安装对应依赖
+
+---
+
+### 下一步建议
+
+#### 路由增强
+1. 添加动态路由（如 /reader/:bookId/:chapterId）
+2. 添加路由守卫（登录验证）
+3. 添加路由参数传递
+
+#### 用户体验优化
+1. 添加页面过渡动画
+2. 添加路由懒加载（React.lazy）
+3. 添加页面加载进度条
+
+---
+
+### 总结
+
+**完成情况**: ✅ 100% 完成
+
+**核心成果**:
+- ✅ 实现真正的URL路由
+- ✅ 支持浏览器前进后退
+- ✅ 每个页面有独立URL
+- ✅ 保持现有功能不变
+- ✅ 构建测试通过
+
+**改动范围**:
+- 修改文件：6个
+- 新建文件：2个
+- 代码行数：约150行
+
+**项目状态**: 🚀 路由系统完全实现，URL正确变化，用户体验符合现代Web应用标准
+
+---
+

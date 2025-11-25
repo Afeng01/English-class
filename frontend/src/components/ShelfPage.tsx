@@ -1,23 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, BookOpen } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { useAppStore } from '../stores/useAppStore';
 import type { Book } from '../types';
 
-type Page = 'home' | 'shelf' | 'vocab' | 'reader';
-
-interface ShelfPageProps {
-  onNavigate: (page: Page) => void;
-}
-
-export default function ShelfPage({ onNavigate }: ShelfPageProps | {}) {
+export default function ShelfPage() {
+  const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const setCurrentBook = useAppStore(state => state.setCurrentBook);
-
-  // 处理可能未传入onNavigate的情况
-  const navigate = (onNavigate as (page: Page) => void) || (() => {});
 
   useEffect(() => {
     loadBooks();
@@ -38,9 +31,7 @@ export default function ShelfPage({ onNavigate }: ShelfPageProps | {}) {
 
   const handleBookClick = (book: Book) => {
     setCurrentBook(book);
-    if (navigate) {
-      navigate('reader');
-    }
+    navigate('/reader');
   };
 
   return (

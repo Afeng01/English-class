@@ -1,24 +1,24 @@
 import { Book, Brain, User } from 'lucide-react';
-
-type Page = 'home' | 'shelf' | 'vocab' | 'reader';
+import { Link, useLocation } from 'react-router-dom';
 
 interface NavigationProps {
-  currentPage: Page;
-  onNavigate: (page: Page) => void;
   isLoggedIn: boolean;
   onToggleLogin: () => void;
 }
 
-export default function Navigation({ currentPage, onNavigate, isLoggedIn, onToggleLogin }: NavigationProps) {
+export default function Navigation({ isLoggedIn, onToggleLogin }: NavigationProps) {
+  const location = useLocation();
+  const currentPath = location.pathname;
+
   return (
     <nav className="w-full px-8 py-4 flex justify-between items-center bg-white border-b border-gray-100 sticky top-0 z-50">
-      <div
+      <Link
+        to="/"
         className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-        onClick={() => onNavigate('home')}
       >
         <Book className="w-8 h-8 text-teal-700" />
         <span className="text-xl font-bold tracking-wide text-teal-900">EnglishAcquire</span>
-      </div>
+      </Link>
 
       <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-gray-100 px-5 py-2.5 rounded-full shadow-inner">
         <a
@@ -47,22 +47,22 @@ export default function Navigation({ currentPage, onNavigate, isLoggedIn, onTogg
       </div>
 
       <div className="flex items-center gap-6 text-sm font-medium text-gray-600">
-        <button
-          onClick={() => onNavigate('shelf')}
+        <Link
+          to="/shelf"
           className={`flex items-center gap-1 ${
-            currentPage === 'shelf' ? 'text-teal-700 font-bold' : 'hover:text-teal-700'
+            currentPath === '/shelf' ? 'text-teal-700 font-bold' : 'hover:text-teal-700'
           }`}
         >
           <Book className="w-4 h-4" /> 书架
-        </button>
-        <button
-          onClick={() => onNavigate('vocab')}
+        </Link>
+        <Link
+          to="/vocab"
           className={`flex items-center gap-1 ${
-            currentPage === 'vocab' ? 'text-teal-700 font-bold' : 'hover:text-teal-700'
+            currentPath === '/vocab' ? 'text-teal-700 font-bold' : 'hover:text-teal-700'
           }`}
         >
           <Brain className="w-4 h-4" /> 词库
-        </button>
+        </Link>
 
         <div
           className={`w-8 h-8 rounded-full ${isLoggedIn ? 'bg-teal-100 text-teal-700' : 'bg-gray-200 text-gray-500'} flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-teal-500`}
