@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Lightbulb, BookOpen, CheckCircle, Clock, BookMarked, Plus } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { progressStorage } from '../services/storage';
-import { useAppStore } from '../stores/useAppStore';
 import type { Book } from '../types';
 
 type FilterMode = 'cn' | 'us' | 'lexile';
@@ -18,7 +17,6 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [recentBook, setRecentBook] = useState<Book | null>(null);
-  const setCurrentBook = useAppStore(state => state.setCurrentBook);
 
   useEffect(() => {
     loadBooks();
@@ -54,8 +52,7 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
   };
 
   const handleBookClick = (book: Book) => {
-    setCurrentBook(book);
-    navigate('/reader');
+    navigate(`/book/${book.id}`);
   };
 
   return (

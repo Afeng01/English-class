@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, BookOpen, Upload } from 'lucide-react';
 import { booksAPI } from '../services/api';
-import { useAppStore } from '../stores/useAppStore';
 import type { Book } from '../types';
 
 export default function ShelfPage() {
@@ -10,7 +9,6 @@ export default function ShelfPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const setCurrentBook = useAppStore(state => state.setCurrentBook);
 
   useEffect(() => {
     loadBooks();
@@ -30,8 +28,7 @@ export default function ShelfPage() {
   };
 
   const handleBookClick = (book: Book) => {
-    setCurrentBook(book);
-    navigate('/reader');
+    navigate(`/book/${book.id}`);
   };
 
   return (

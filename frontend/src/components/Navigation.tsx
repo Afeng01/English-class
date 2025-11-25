@@ -1,17 +1,44 @@
-import { Book, Brain, User } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Book, Brain, User, Sun, Moon } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 interface NavigationProps {
   isLoggedIn: boolean;
   onToggleLogin: () => void;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
 }
 
-export default function Navigation({ isLoggedIn, onToggleLogin }: NavigationProps) {
+export default function Navigation({ isLoggedIn, onToggleLogin, theme, onToggleTheme }: NavigationProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentPath = location.pathname;
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // 如果滚动距离小于 50px，始终显示导航栏
+      if (currentScrollY < 50) {
+        setIsVisible(true);
+      } else {
+        // 向下滚动隐藏，向上滚动显示
+        setIsVisible(currentScrollY < lastScrollY);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   return (
-    <nav className="w-full px-8 py-4 flex justify-between items-center bg-white border-b border-gray-100 sticky top-0 z-50">
+    <nav className={`w-full px-8 py-4 flex justify-between items-center bg-white border-b border-gray-100 sticky top-0 z-50 transition-transform duration-300 ${
+      isVisible ? 'translate-y-0' : '-translate-y-full'
+    }`}>
       <Link
         to="/"
         className="flex items-center gap-2 cursor-pointer hover:opacity-80"
@@ -22,7 +49,7 @@ export default function Navigation({ isLoggedIn, onToggleLogin }: NavigationProp
 
       <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-gray-100 px-5 py-2.5 rounded-full shadow-inner">
         <a
-          href="https://github.com"
+          href="https://github.com/your-repo"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-black text-gray-500 transition-colors"
@@ -33,15 +60,25 @@ export default function Navigation({ isLoggedIn, onToggleLogin }: NavigationProp
           </svg>
         </a>
         <div className="w-px h-4 bg-gray-300"></div>
-        <button className="hover:text-amber-600 text-gray-500 transition-colors" title="切换背景">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-          </svg>
+        <button
+          onClick={onToggleTheme}
+          className="hover:text-amber-600 text-gray-500 transition-colors"
+          title={theme === 'light' ? '切换到深色模式' : '切换到浅色模式'}
+        >
+          {theme === 'light' ? (
+            <Moon className="w-5 h-5" />
+          ) : (
+            <Sun className="w-5 h-5" />
+          )}
         </button>
         <div className="w-px h-4 bg-gray-300"></div>
-        <button className="hover:text-teal-600 text-gray-500 transition-colors" title="切换语言">
+        <button
+          onClick={() => navigate('/about')}
+          className="hover:text-teal-600 text-gray-500 transition-colors"
+          title="联系我们"
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </button>
       </div>

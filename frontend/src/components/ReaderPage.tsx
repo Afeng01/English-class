@@ -241,62 +241,62 @@ export default function ReaderPage() {
           )}
         </div>
 
-        <div className="w-72 border-l border-[#EAE4D6] bg-white hidden lg:block p-6">
-          <div className="sticky top-20">
-            <h4 className="text-xs font-bold text-gray-400 uppercase mb-4">Selected Word</h4>
-            {selectedWord ? (
-              lookupLoading ? (
-                <div className="flex items-center justify-center py-10">
-                  <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
-                </div>
-              ) : wordDefinition ? (
-                <>
-                  <div className="mb-6">
-                    <div className="text-2xl font-bold text-teal-800 font-serif capitalize">
-                      {wordDefinition.word}
-                    </div>
-                    {wordDefinition.phonetic && (
-                      <div className="text-sm text-gray-500 italic mt-1">{wordDefinition.phonetic}</div>
-                    )}
-                    {wordDefinition.meanings.map((meaning, idx) => (
-                      <div key={idx} className="mt-3">
-                        {meaning.partOfSpeech && (
-                          <div className="text-xs font-semibold text-gray-400 uppercase mb-1">
-                            {meaning.partOfSpeech}
-                          </div>
-                        )}
-                        {meaning.definitions?.slice(0, 2).map((def, defIdx) => (
-                          <div key={defIdx} className="mb-2">
-                            <p className="text-sm text-gray-700">{def.definition}</p>
-                            {def.example && (
-                              <p className="text-xs text-gray-500 italic mt-1">&ldquo;{def.example}&rdquo;</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
+          <div className="w-72 border-l border-[#EAE4D6] bg-white hidden lg:block p-6">
+            <div className="sticky top-20">
+              <h4 className="text-xs font-bold text-gray-400 uppercase mb-4">Selected Word</h4>
+              {selectedWord ? (
+                lookupLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
                   </div>
-                  <button
-                    onClick={handleAddWord}
-                    disabled={vocabularyStorage.has(wordDefinition.word)}
-                    className={`w-full py-2 rounded text-sm flex items-center justify-center gap-2 ${
-                      vocabularyStorage.has(wordDefinition.word)
-                        ? 'border border-gray-300 text-gray-400 cursor-not-allowed'
-                        : 'border border-teal-600 text-teal-600 hover:bg-teal-50'
-                    }`}
-                  >
-                    <Plus className="w-4 h-4" />{' '}
-                    {vocabularyStorage.has(wordDefinition.word) ? '已在生词本' : '加入生词本'}
-                  </button>
-                </>
+                ) : wordDefinition ? (
+                  <>
+                    <div className="mb-6">
+                      <div className="text-2xl font-bold text-teal-800 font-serif capitalize">
+                        {wordDefinition.word}
+                      </div>
+                      {wordDefinition.phonetic && (
+                        <div className="text-sm text-gray-500 italic mt-1">{wordDefinition.phonetic}</div>
+                      )}
+                      {wordDefinition.meanings.map((meaning, idx) => (
+                        <div key={idx} className="mt-3">
+                          {meaning.partOfSpeech && (
+                            <div className="text-xs font-semibold text-gray-400 uppercase mb-1">
+                              {meaning.partOfSpeech}
+                            </div>
+                          )}
+                          {meaning.definitions?.slice(0, 2).map((def, defIdx) => (
+                            <div key={defIdx} className="mb-2">
+                              <p className="text-sm text-gray-700">{def.definition}</p>
+                              {def.example && (
+                                <p className="text-xs text-gray-500 italic mt-1">&ldquo;{def.example}&rdquo;</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={handleAddWord}
+                      disabled={vocabularyStorage.has(wordDefinition.word)}
+                      className={`w-full py-2 rounded text-sm flex items-center justify-center gap-2 ${
+                        vocabularyStorage.has(wordDefinition.word)
+                          ? 'border border-gray-300 text-gray-400 cursor-not-allowed'
+                          : 'border border-teal-600 text-teal-600 hover:bg-teal-50'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />{' '}
+                      {vocabularyStorage.has(wordDefinition.word) ? '已在生词本' : '加入生词本'}
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-sm text-gray-500">无法找到该单词的释义</div>
+                )
               ) : (
-                <div className="text-sm text-gray-500">无法找到该单词的释义</div>
-              )
-            ) : (
-              <div className="text-sm text-gray-400">点击文章中的单词查看释义</div>
-            )}
+                <div className="text-sm text-gray-400">点击文章中的单词查看释义</div>
+              )}
+            </div>
           </div>
-        </div>
       </div>
     </main>
   );
