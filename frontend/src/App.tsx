@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import HomePage from './components/HomePage';
 import VocabPage from './components/VocabPage';
@@ -16,6 +16,9 @@ function App() {
     const saved = localStorage.getItem('theme');
     return (saved === 'dark' ? 'dark' : 'light') as 'light' | 'dark';
   });
+
+  const location = useLocation();
+  const isReaderPage = location.pathname === '/reader';
 
   useEffect(() => {
     // 应用主题到 document
@@ -37,12 +40,15 @@ function App() {
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-[#F9F7F2] text-gray-800'} flex flex-col transition-colors duration-300`}>
-      <Navigation
-        isLoggedIn={isLoggedIn}
-        onToggleLogin={toggleLogin}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+      {/* 阅读器页面隐藏顶部导航栏 */}
+      {!isReaderPage && (
+        <Navigation
+          isLoggedIn={isLoggedIn}
+          onToggleLogin={toggleLogin}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
+      )}
 
       <Routes>
         <Route path="/" element={<HomePage isLoggedIn={isLoggedIn} />} />

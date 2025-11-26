@@ -8,6 +8,7 @@ import re
 import sys
 import uuid
 import shutil
+import logging
 from collections import Counter
 
 import ebooklib
@@ -18,6 +19,11 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models.database import SessionLocal, create_tables, Book, Chapter, BookVocabulary
+from app.utils.oss_helper import oss_helper
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def extract_text_from_html(html_content: str) -> str:
@@ -271,14 +277,22 @@ def import_epub(epub_path: str, level: str = None) -> str:
                     href = link.href.split('#')[0]
                     toc_titles[href] = link.title
 
-    # 创建书籍图片目录
+    # 创建书籍图片目录（本地存储fallback）
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     images_dir = os.path.join(backend_dir, "data", "images", book_id)
-    os.makedirs(images_dir, exist_ok=True)
+
+    # 查找封面图片ID（从metadata中）
+    cover_image_id = None
+    for meta in book.get_metadata('OPF', 'cover'):
+        if meta:
+            cover_image_id = meta[0]
+            logger.info(f"从metadata找到封面ID: {cover_image_id}")
+            break
 
     # 提取并保存所有图片，建立映射关系
     image_map = {}  # 原始路径 -> 新URL
     cover_path = None
+    cover_candidates = []  # 封面候选列表
 
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_IMAGE:
@@ -288,14 +302,30 @@ def import_epub(epub_path: str, level: str = None) -> str:
 
             # 生成唯一文件名避免冲突
             unique_name = f"{uuid.uuid4().hex[:8]}_{file_name}"
-            save_path = os.path.join(images_dir, unique_name)
+            image_data = item.get_content()
 
-            # 保存图片
-            with open(save_path, 'wb') as f:
-                f.write(item.get_content())
+            # 尝试上传到OSS，失败则使用本地存储
+            try:
+                if oss_helper.enabled:
+                    # 上传到OSS
+                    object_name = f"{book_id}/{unique_name}"
+                    new_url = oss_helper.upload_image(image_data, object_name)
+                    logger.info(f"图片已上传到OSS: {object_name}")
+                else:
+                    # 使用本地存储
+                    os.makedirs(images_dir, exist_ok=True)
+                    save_path = os.path.join(images_dir, unique_name)
+                    new_url = oss_helper.save_image_local(image_data, save_path)
+                    logger.info(f"图片已保存到本地: {save_path}")
+
+            except Exception as e:
+                # OSS上传失败，fallback到本地存储
+                logger.warning(f"OSS上传失败，使用本地存储: {e}")
+                os.makedirs(images_dir, exist_ok=True)
+                save_path = os.path.join(images_dir, unique_name)
+                new_url = oss_helper.save_image_local(image_data, save_path)
 
             # 建立映射：各种可能的引用路径 -> 新URL
-            new_url = f"/static/images/{book_id}/{unique_name}"
             image_map[item_name] = new_url
             image_map[file_name] = new_url
             image_map[os.path.basename(item_name)] = new_url
@@ -305,9 +335,44 @@ def import_epub(epub_path: str, level: str = None) -> str:
                 image_map['../' + item_name] = new_url
                 image_map['./' + item_name] = new_url
 
-            # 第一张图片作为封面
-            if cover_path is None:
-                cover_path = new_url
+            # 检查是否为封面图片
+            is_cover = False
+
+            # 方法1：检查是否匹配metadata中的cover ID
+            if cover_image_id:
+                # cover_image_id可能是item的id或文件名
+                if (item.get_id() == cover_image_id or
+                    file_name == cover_image_id or
+                    item_name == cover_image_id or
+                    item_name.endswith(cover_image_id)):
+                    cover_path = new_url
+                    is_cover = True
+                    logger.info(f"✅ 找到封面图片（通过metadata）: {file_name}")
+
+            # 方法2：检查文件名是否包含"cover"关键词
+            if not is_cover:
+                file_lower = file_name.lower()
+                item_lower = item_name.lower()
+                if ('cover' in file_lower or 'cover' in item_lower or
+                    'cov' in file_lower):  # 有些命名为cov.jpg
+                    cover_candidates.append((new_url, file_name, 1))  # 优先级1
+                    logger.info(f"📌 找到封面候选（文件名包含cover）: {file_name}")
+                # 检查是否在images根目录且文件名简单（如cover.jpg, image001.jpg）
+                elif '/' not in item_name or item_name.count('/') <= 1:
+                    # 根目录的图片更可能是封面
+                    cover_candidates.append((new_url, file_name, 2))  # 优先级2
+
+    # 如果还没有找到封面，从候选列表中选择优先级最高的
+    if not cover_path and cover_candidates:
+        # 按优先级排序（优先级数字越小越优先）
+        cover_candidates.sort(key=lambda x: x[2])
+        cover_path = cover_candidates[0][0]
+        logger.info(f"✅ 选择封面（从候选中）: {cover_candidates[0][1]}")
+
+    # 如果仍然没有封面，使用第一张图片（fallback）
+    if not cover_path and image_map:
+        cover_path = list(image_map.values())[0]
+        logger.warning(f"⚠️  使用第一张图片作为封面（fallback）")
 
     # 提取章节内容
     chapters_data = []
@@ -469,9 +534,17 @@ def import_epub(epub_path: str, level: str = None) -> str:
 
     except Exception as e:
         db.rollback()
-        # 清理已创建的图片目录
+        # 清理已创建的图片
+        logger.error(f"导入书籍失败，清理图片资源: {e}")
+
+        # 清理OSS图片
+        if oss_helper.enabled:
+            oss_helper.delete_images(book_id)
+
+        # 清理本地图片目录
         if os.path.exists(images_dir):
             shutil.rmtree(images_dir)
+
         raise e
     finally:
         db.close()

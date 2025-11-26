@@ -64,7 +64,7 @@ export const booksAPI = {
 
 // 词典相关 API
 export const dictionaryAPI = {
-  // 查询单词
+  // 查询单词（后端返回中英文全部结果）
   lookup: (word: string) =>
     api.get<DictionaryResult>(`/dictionary/${word}`),
 };

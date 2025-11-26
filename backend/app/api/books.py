@@ -4,9 +4,13 @@ from typing import List, Optional
 import os
 import tempfile
 import shutil
+import logging
 
 from app.models.database import get_db, Book, Chapter, BookVocabulary
 from app.schemas.schemas import BookResponse, BookDetailResponse, ChapterResponse, VocabularyResponse
+from app.utils.oss_helper import oss_helper
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -157,11 +161,14 @@ async def delete_book(book_id: str, db: Session = Depends(get_db)):
         # 删除相关的词汇
         db.query(BookVocabulary).filter(BookVocabulary.book_id == book_id).delete()
 
-        # 删除书籍图片目录
+        # 删除OSS图片
+        if oss_helper.enabled:
+            oss_helper.delete_images(book_id)
+            logger.info(f"已删除书籍 {book_id} 的OSS图片")
+
+        # 删除本地图片目录（兼容旧数据）
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        images_dir = os.path.join(backend_dir, "data", "images", book_id)
-        if os.path.exists(images_dir):
-            shutil.rmtree(images_dir)
+        oss_helper.delete_local_images(book_id, backend_dir)
 
         # 删除书籍记录
         db.delete(book)
@@ -171,4 +178,5 @@ async def delete_book(book_id: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         db.rollback()
+        logger.error(f"删除书籍失败: {e}")
         raise HTTPException(status_code=500, detail=f"删除书籍失败：{str(e)}")

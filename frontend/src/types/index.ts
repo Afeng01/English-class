@@ -63,8 +63,8 @@ export interface UserVocabulary {
 // 阅读进度
 export interface ReadingProgress {
   book_id: string;
-  current_chapter: number;
-  current_page: number;
+  chapter_number: number;
+  position: number;
   updated_at: string;
 }
 

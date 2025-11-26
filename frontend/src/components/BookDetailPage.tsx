@@ -240,14 +240,9 @@ export default function BookDetailPage() {
                         : 'border-transparent'
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-medium text-gray-400 w-12">
-                        第 {chapter.chapter_number} 章
-                      </span>
-                      <span className="font-medium text-gray-800">
-                        {chapter.title || `章节 ${chapter.chapter_number}`}
-                      </span>
-                    </div>
+                    <span className="font-medium text-gray-800">
+                      {chapter.title || `章节 ${chapter.chapter_number}`}
+                    </span>
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-gray-500">
                         {chapter.word_count.toLocaleString()} 词

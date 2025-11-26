@@ -10,6 +10,8 @@ load_dotenv()
 
 from app.api import books, dictionary
 from app.models.database import create_tables
+from app.utils.oss_helper import oss_helper
+from app.config import oss_config
 
 app = FastAPI(title="English Reading App API", version="1.0.0")
 
@@ -35,6 +37,24 @@ app.include_router(dictionary.router, prefix="/api/dictionary", tags=["dictionar
 async def startup():
     """应用启动时初始化"""
     create_tables()
+
+    # 显示OSS配置状态
+    print("\n" + "="*50)
+    print("📦 图片存储配置")
+    print("="*50)
+    if oss_helper.enabled:
+        print(f"✅ OSS存储已启用")
+        print(f"   Bucket: {oss_config.bucket_name}")
+        print(f"   Endpoint: {oss_config.endpoint}")
+        print(f"   状态: 图片将自动上传到阿里云OSS")
+    else:
+        if oss_config.use_oss:
+            print("⚠️  OSS配置不完整或初始化失败")
+            print("   将使用本地存储作为备选方案")
+        else:
+            print("💾 使用本地存储")
+            print("   图片将保存到: backend/data/images/")
+    print("="*50 + "\n")
 
     # 下载 NLTK 数据（词形还原所需）
     # 这些数据用于将词形变化还原为原形，如 running → run, went → go
