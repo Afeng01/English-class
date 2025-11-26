@@ -14,6 +14,12 @@
 - 🎨 **Calibre 风格阅读器** - 沉浸式阅读体验
 - ⚙️ **个性化设置** - 字体大小、主题、行高可调
 - 📖 **阅读进度** - 自动保存，随时继续
+- 🔐 **用户认证与云端同步** ⭐ 最新功能（2025-11-26）
+  - 🔑 **Google OAuth登录** - 一键登录，安全便捷
+  - ☁️ **云端数据同步** - 生词本、阅读进度、设置多设备自动同步
+  - 🔄 **自动迁移** - 首次登录自动迁移本地历史数据到云端
+  - 🔒 **数据隔离** - Row Level Security保护用户隐私
+  - 📱 **多设备支持** - 手机、电脑无缝切换，数据实时同步
 
 ## 技术栈
 
@@ -24,16 +30,25 @@
 - Axios - HTTP 请求
 - Tailwind CSS - 样式框架
 - Vite - 构建工具
+- **Supabase Client** ⭐ - 认证和数据同步
 
 ### 后端
 - FastAPI - Python Web 框架
 - SQLAlchemy - ORM
-- SQLite - 数据库
+- SQLite - 数据库（本地）
+- **Supabase** ⭐ - PostgreSQL云数据库 + Auth
 - ebooklib - EPUB 解析
 - httpx - 异步 HTTP 客户端
 - NLTK - 自然语言处理（词形还原）
 - python-dotenv - 环境变量管理
 - 有道智云词典API - 中英双语词典服务
+
+### 云服务
+- **Supabase** ⭐ - Backend-as-a-Service
+  - PostgreSQL数据库
+  - Google OAuth认证
+  - Row Level Security (RLS)
+  - 实时数据同步
 
 ## 快速开始
 
@@ -48,7 +63,9 @@
 cd /path/to/English-class
 ```
 
-### 2. 配置有道词典API（必须）
+### 2. 配置后端环境变量
+
+#### 2.1 配置有道词典API（必须，用于查词功能）
 
 ```bash
 cd backend
@@ -68,6 +85,35 @@ cp .env.example .env
 4. 复制到 `.env` 文件中
 
 详细配置请查看：[词典API说明.md](backend/词典API说明.md)
+
+#### 2.2 配置Supabase（可选，用于云端同步）⭐
+
+如果需要使用云端数据同步和Google登录功能，需要配置Supabase：
+
+**后端配置：**
+```bash
+# backend/.env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key_here
+```
+
+**前端配置：**
+```bash
+# frontend/.env.local
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+```
+
+**如何获取Supabase配置：**
+1. 访问 https://supabase.com/ 创建项目
+2. 在项目Dashboard → Settings → API 中获取：
+   - Project URL → `SUPABASE_URL` 和 `VITE_SUPABASE_URL`
+   - Anon Public Key → `VITE_SUPABASE_ANON_KEY`（前端使用）
+   - Service Role Key → `SUPABASE_SERVICE_KEY`（后端使用，⚠️ 保密）
+3. 在Authentication → Providers中启用Google OAuth
+4. 执行数据库Schema（详见：[工作总结-2025-11-26-用户认证与云端同步.md](工作总结-2025-11-26-用户认证与云端同步.md#阶段1supabase项目配置)）
+
+**注意：** 如果不配置Supabase，应用仍可正常使用，但用户数据将仅保存在本地浏览器（localStorage），无法多设备同步。
 
 ### 3. 启动后端
 

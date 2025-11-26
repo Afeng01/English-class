@@ -1,11 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { booksAPI } from '../services/api';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export default function UploadPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 检查登录状态
+  useEffect(() => {
+    if (!user) {
+      alert('请登录后再使用该功能');
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const [file, setFile] = useState<File | null>(null);
   const [level, setLevel] = useState('一年级');

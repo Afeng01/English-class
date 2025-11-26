@@ -1,69 +1,127 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAppStore } from '../stores/useAppStore';
 
-export default function VocabPage() {
-  const [showMeaning, setShowMeaning] = useState(false);
+export default function VocabularyPage() {
+  const navigate = useNavigate();
+  const { vocabulary, loadVocabulary, removeWord, updateWordStatus } = useAppStore();
+
+  useEffect(() => {
+    loadVocabulary();
+  }, [loadVocabulary]);
+
+  const learningWords = vocabulary.filter((v) => v.status === 'learning');
+  const masteredWords = vocabulary.filter((v) => v.status === 'mastered');
 
   return (
-    <main className="flex-grow w-full max-w-5xl mx-auto px-6 py-10">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">我的词库</h2>
-          <p className="text-gray-500 text-sm">基于 SRS 间隔重复算法复习</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center">
+          <button
+            onClick={() => navigate('/')}
+            className="mr-4 text-gray-600 hover:text-gray-900"
+          >
+            ← 返回
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">我的词库</h1>
         </div>
-        <div className="flex gap-4 text-center">
-          <div className="bg-teal-50 px-4 py-2 rounded-lg border border-teal-100">
-            <div className="text-xl font-bold text-teal-700">12</div>
-            <div className="text-xs text-teal-600">今日待复习</div>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-gray-200">
-            <div className="text-xl font-bold text-gray-700">843</div>
-            <div className="text-xs text-gray-500">总词汇量</div>
-          </div>
-        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+        {/* Learning words */}
+        <section>
+          <h2 className="text-xl font-bold mb-4">学习中 ({learningWords.length})</h2>
+          {learningWords.length === 0 ? (
+            <p className="text-gray-500 text-center py-12">暂无生词</p>
+          ) : (
+            <div className="space-y-3">
+              {learningWords.map((vocab) => (
+                <div
+                  key={vocab.word}
+                  className="bg-white rounded-lg shadow p-4 hover:shadow-md transition"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-baseline gap-3 mb-2">
+                        <span className="font-bold text-lg">{vocab.word}</span>
+                        {vocab.phonetic && (
+                          <span className="text-gray-500 text-sm">{vocab.phonetic}</span>
+                        )}
+                      </div>
+                      {vocab.definition && (
+                        <p className="text-gray-600 text-sm mb-2">{vocab.definition}</p>
+                      )}
+                      <p className="text-xs text-gray-400">
+                        添加于 {new Date(vocab.added_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 ml-4">
+                      <button
+                        onClick={async () => await updateWordStatus(vocab.word, 'mastered')}
+                        className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200 transition"
+                      >
+                        已掌握
+                      </button>
+                      <button
+                        onClick={async () => await removeWord(vocab.word)}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Mastered words */}
+        <section>
+          <h2 className="text-xl font-bold mb-4">已掌握 ({masteredWords.length})</h2>
+          {masteredWords.length === 0 ? (
+            <p className="text-gray-500 text-center py-12">暂无已掌握词汇</p>
+          ) : (
+            <div className="space-y-3">
+              {masteredWords.map((vocab) => (
+                <div
+                  key={vocab.word}
+                  className="bg-white rounded-lg shadow p-4 hover:shadow-md transition opacity-75"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-baseline gap-3 mb-2">
+                        <span className="font-bold text-lg">{vocab.word}</span>
+                        {vocab.phonetic && (
+                          <span className="text-gray-500 text-sm">{vocab.phonetic}</span>
+                        )}
+                      </div>
+                      {vocab.definition && (
+                        <p className="text-gray-600 text-sm mb-2">{vocab.definition}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2 ml-4">
+                      <button
+                        onClick={async () => await updateWordStatus(vocab.word, 'learning')}
+                        className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded text-sm hover:bg-yellow-200 transition"
+                      >
+                        继续学习
+                      </button>
+                      <button
+                        onClick={async () => await removeWord(vocab.word)}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-
-      <div className="bg-white w-full max-w-2xl mx-auto aspect-[4/3] md:aspect-[5/3] rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center justify-center relative p-8 text-center">
-        <div className="absolute top-6 right-6">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">New Word</span>
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-serif text-5xl text-gray-900 mb-4">Acquisition</h3>
-          <div className="text-gray-400 italic text-lg">/ˌæk.wɪˈzɪʃ.ən/</div>
-        </div>
-
-        {showMeaning && (
-          <div className="mb-10 max-w-lg text-gray-600 leading-relaxed">
-            n. 获得，习得
-            <br />
-            <span className="text-sm text-gray-400">"Language acquisition is a subconscious process."</span>
-          </div>
-        )}
-
-        {!showMeaning && (
-          <button
-            onClick={() => setShowMeaning(true)}
-            className="mb-10 px-6 py-2 text-teal-700 border border-teal-300 rounded-lg hover:bg-teal-50 transition-colors"
-          >
-            显示释义
-          </button>
-        )}
-
-        <div className="flex gap-4 w-full max-w-md">
-          <button
-            onClick={() => setShowMeaning(false)}
-            className="flex-1 py-3 rounded-lg border-2 border-red-100 text-red-600 hover:bg-red-50 font-medium transition-colors"
-          >
-            忘记了
-          </button>
-          <button
-            onClick={() => setShowMeaning(false)}
-            className="flex-1 py-3 rounded-lg border-2 border-teal-100 text-teal-700 hover:bg-teal-50 font-medium transition-colors"
-          >
-            记得
-          </button>
-        </div>
-      </div>
-    </main>
+    </div>
   );
 }

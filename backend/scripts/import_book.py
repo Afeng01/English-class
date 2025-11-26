@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models.database import SessionLocal, create_tables, Book, Chapter, BookVocabulary
 from app.utils.oss_helper import oss_helper
+from app.utils.supabase_client import supabase_client
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -521,6 +522,53 @@ def import_epub(epub_path: str, level: str = None) -> str:
             db.add(db_vocab)
 
         db.commit()
+
+        # 同时写入Supabase（如果已配置）
+        if supabase_client.enabled:
+            try:
+                logger.info("📤 开始同步数据到Supabase...")
+
+                # 1. 插入书籍数据
+                book_data_for_supabase = {
+                    'id': book_id,
+                    'title': title,
+                    'author': author,
+                    'cover': cover_path,
+                    'level': level,
+                    'word_count': total_words,
+                    'description': description,
+                    'epub_path': epub_path,
+                }
+                supabase_client.insert_book(book_data_for_supabase)
+
+                # 2. 批量插入章节数据
+                chapters_for_supabase = []
+                for chapter_data in chapters_data:
+                    chapters_for_supabase.append({
+                        'id': chapter_data['id'],
+                        'book_id': chapter_data['book_id'],
+                        'chapter_number': chapter_data['chapter_number'],
+                        'title': chapter_data.get('title'),
+                        'content': chapter_data['content'],
+                        'word_count': chapter_data['word_count'],
+                    })
+                supabase_client.bulk_insert_chapters(chapters_for_supabase)
+
+                # 3. 批量插入词汇数据
+                vocab_for_supabase = []
+                for word, freq in high_freq_words:
+                    vocab_for_supabase.append({
+                        'id': str(uuid.uuid4()),
+                        'book_id': book_id,
+                        'word': word,
+                        'frequency': freq,
+                    })
+                supabase_client.bulk_insert_vocabulary(vocab_for_supabase)
+
+                logger.info("✅ 数据已成功同步到Supabase")
+            except Exception as e:
+                logger.warning(f"⚠️ Supabase同步失败（不影响本地SQLite）: {e}")
+
         print(f"✅ Successfully imported: {title}")
         print(f"   - Author: {author}")
         print(f"   - Chapters: {len(chapters_data)}")

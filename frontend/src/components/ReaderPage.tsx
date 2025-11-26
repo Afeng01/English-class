@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Type, List, Plus, Loader2, AlertCircle, X, Volume2 } from 'lucide-react';
+import { ArrowLeft, Type, List, Plus, Loader2, AlertCircle, X, Volume2, Check } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { booksAPI, dictionaryAPI } from '../services/api';
 import { progressStorage, vocabularyStorage } from '../services/storage';
 import type { Chapter, DictionaryResult } from '../types';
+import Toast from './Toast';
 
 export default function ReaderPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const currentBook = useAppStore(state => state.currentBook);
   const addWord = useAppStore(state => state.addWord);
+  const { user } = useAuthStore();
   const contentRef = useRef<HTMLDivElement>(null);
   const isInitialLoad = useRef(true); // 标记是否首次加载
 
@@ -23,6 +26,10 @@ export default function ReaderPage() {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordDefinition, setWordDefinition] = useState<DictionaryResult | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [wordAdded, setWordAdded] = useState(false); // 添加成功的反馈状态
+
+  // Toast通知状态
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // 弹窗状态
   const [showToc, setShowToc] = useState(false);
@@ -262,16 +269,34 @@ export default function ReaderPage() {
   }, [selectedWord]);
 
   // 添加到生词本
-  const handleAddWord = () => {
+  const handleAddWord = async () => {
     if (!wordDefinition) return;
 
+    // 检查是否已登录
+    if (!user) {
+      setToast({ message: '请登录后使用生词本功能', type: 'info' });
+      return;
+    }
+
+    // 乐观UI更新 - 立即显示为已添加
+    setWordAdded(true);
+
     const definition = wordDefinition.meanings[0]?.definitions?.[0]?.definition || '';
-    addWord({
+    const success = await addWord({
       word: wordDefinition.word,
       phonetic: wordDefinition.phonetic,
       definition,
       status: 'learning',
     });
+
+    if (success) {
+      setToast({ message: '已添加到生词本', type: 'success' });
+      setTimeout(() => setWordAdded(false), 2000); // 2秒后隐藏提示
+    } else {
+      // 失败时恢复乐观更新
+      setWordAdded(false);
+      setToast({ message: '添加失败，请重试', type: 'error' });
+    }
   };
 
   // 章节导航
@@ -312,7 +337,17 @@ export default function ReaderPage() {
   }
 
   return (
-    <main className="flex-grow flex flex-col bg-[#FDFBF7]">
+    <>
+      {/* Toast通知 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <main className="flex-grow flex flex-col bg-[#FDFBF7]">
       <div className="h-14 border-b border-[#EAE4D6] flex items-center justify-between px-6 bg-[#FDFBF7] sticky top-0 z-40">
         <button
           className="text-gray-500 hover:text-teal-700 flex items-center gap-1"
@@ -573,15 +608,26 @@ export default function ReaderPage() {
                     </div>
                     <button
                       onClick={handleAddWord}
-                      disabled={vocabularyStorage.has(wordDefinition.word)}
-                      className={`w-full py-2 rounded text-sm flex items-center justify-center gap-2 transition-colors ${
-                        vocabularyStorage.has(wordDefinition.word)
+                      disabled={vocabularyStorage.has(wordDefinition.word) || wordAdded}
+                      className={`w-full py-2 rounded text-sm flex items-center justify-center gap-2 transition-all ${
+                        wordAdded
+                          ? 'bg-green-500 text-white'
+                          : vocabularyStorage.has(wordDefinition.word)
                           ? 'bg-gray-100 border border-gray-300 text-gray-400 cursor-not-allowed'
                           : 'border border-teal-600 text-teal-600 hover:bg-teal-50'
                       }`}
                     >
-                      <Plus className="w-4 h-4" />
-                      {vocabularyStorage.has(wordDefinition.word) ? '已在生词本' : '加入生词本'}
+                      {wordAdded ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          已添加
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" />
+                          {vocabularyStorage.has(wordDefinition.word) ? '已在生词本' : '加入生词本'}
+                        </>
+                      )}
                     </button>
                   </>
                 ) : (
@@ -597,5 +643,6 @@ export default function ReaderPage() {
           </div>
       </div>
     </main>
+    </>
   );
 }
