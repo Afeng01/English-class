@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, List, BookMarked, TrendingUp, Play, Info, Brain, GraduationCap } from 'lucide-react';
 import { booksAPI } from '../services/api';
-import { progressStorage } from '../services/storage';
+import { progressStorage, myShelfStorage } from '../services/storage';
 import { useAppStore } from '../stores/useAppStore';
 import type { BookDetail, Vocabulary } from '../types';
 
 export default function BookDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setCurrentBook = useAppStore(state => state.setCurrentBook);
 
   const [book, setBook] = useState<BookDetail | null>(null);
@@ -58,15 +59,19 @@ export default function BookDetailPage() {
   const handleStartReading = () => {
     if (book) {
       setCurrentBook(book);
-      navigate('/reader');
+      // 自动添加到用户书架
+      myShelfStorage.add(book.id);
+      navigate(`/reader?from=book-detail&bookId=${book.id}`);
     }
   };
 
   const handleChapterClick = (chapterNumber: number) => {
     if (book) {
       setCurrentBook(book);
+      // 自动添加到用户书架
+      myShelfStorage.add(book.id);
       // 可以在这里设置初始章节号，通过 URL 参数或 store
-      navigate(`/reader?chapter=${chapterNumber}`);
+      navigate(`/reader?chapter=${chapterNumber}&from=book-detail&bookId=${book.id}`);
     }
   };
 
@@ -94,20 +99,32 @@ export default function BookDetailPage() {
 
   const progress = getReadingProgress();
 
+  const handleBack = () => {
+    const from = searchParams.get('from');
+
+    if (from === 'shelf') {
+      navigate('/shelf');
+    } else if (from === 'my-shelf') {
+      navigate('/my-shelf');
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
     <main className="flex-grow w-full max-w-4xl mx-auto px-6 py-10">
-      {/* 返回按钮 */}
-      <button
-        onClick={() => navigate(-1)}
-        className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 mb-6 transition-colors shadow-sm"
-      >
-        <ArrowLeft className="w-5 h-5" />
-      </button>
+      {/* 顶部按钮栏 */}
+      <div className="flex items-center justify-between mb-6">
+        {/* 返回按钮 */}
+        <button
+          onClick={handleBack}
+          className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 transition-colors shadow-sm"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
 
-      {/* 书籍信息卡片 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm mb-6 relative">
-        {/* 右上角操作按钮 */}
-        <div className="absolute top-6 right-6 flex gap-2">
+        {/* 操作按钮 */}
+        <div className="flex gap-2">
           <button
             onClick={handleStartReading}
             className="w-10 h-10 bg-teal-700 text-white rounded-lg hover:bg-teal-800 transition-colors shadow-lg flex items-center justify-center"
@@ -122,6 +139,10 @@ export default function BookDetailPage() {
             <GraduationCap className="w-5 h-5" />
           </button>
         </div>
+      </div>
+
+      {/* 书籍信息卡片 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm mb-6">
 
         <div className="flex gap-8">
           {/* 左侧：封面 */}
@@ -186,47 +207,45 @@ export default function BookDetailPage() {
         </div>
       </div>
 
-      {/* 标签页 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* 标签页头部 */}
-        <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('chapters')}
-            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === 'chapters'
-                ? 'text-teal-700 border-b-2 border-teal-700 bg-teal-50'
-                : 'text-gray-600 hover:text-teal-600'
-            }`}
-          >
-            <List className="w-5 h-5" />
-            <span>目录</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('vocab')}
-            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === 'vocab'
-                ? 'text-teal-700 border-b-2 border-teal-700 bg-teal-50'
-                : 'text-gray-600 hover:text-teal-600'
-            }`}
-          >
-            <Brain className="w-5 h-5" />
-            <span>高频词汇</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('info')}
-            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === 'info'
-                ? 'text-teal-700 border-b-2 border-teal-700 bg-teal-50'
-                : 'text-gray-600 hover:text-teal-600'
-            }`}
-          >
-            <Info className="w-5 h-5" />
-            <span>简介</span>
-          </button>
-        </div>
+      {/* 标签页导航按钮 */}
+      <div className="flex gap-4 mb-4">
+        <button
+          onClick={() => setActiveTab('chapters')}
+          className={`flex-1 px-6 py-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'chapters'
+              ? 'bg-teal-700 text-white shadow-lg'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-500 hover:text-teal-700'
+          }`}
+        >
+          <List className="w-5 h-5" />
+          <span>目录</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('vocab')}
+          className={`flex-1 px-6 py-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'vocab'
+              ? 'bg-teal-700 text-white shadow-lg'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-500 hover:text-teal-700'
+          }`}
+        >
+          <Brain className="w-5 h-5" />
+          <span>高频词汇</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('info')}
+          className={`flex-1 px-6 py-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'info'
+              ? 'bg-teal-700 text-white shadow-lg'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-500 hover:text-teal-700'
+          }`}
+        >
+          <Info className="w-5 h-5" />
+          <span>简介</span>
+        </button>
+      </div>
 
-        {/* 标签页内容 */}
-        <div className="p-6">
+      {/* 标签页内容 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           {activeTab === 'chapters' && (
             <div className="space-y-2">
               {book.chapters.length === 0 ? (
@@ -372,7 +391,6 @@ export default function BookDetailPage() {
               )}
             </div>
           )}
-        </div>
       </div>
     </main>
   );

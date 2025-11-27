@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   VOCABULARY: 'english_reading_vocabulary',
   PROGRESS: 'english_reading_progress',
   SETTINGS: 'english_reading_settings',
+  MY_SHELF: 'english_reading_my_shelf',
 };
 
 // 词汇库管理
@@ -105,5 +106,40 @@ export const settingsStorage = {
     const settings = settingsStorage.get();
     settings[key] = value;
     settingsStorage.save(settings);
+  },
+};
+
+// 用户书架管理（存储用户已阅读/收藏的书籍ID列表）
+export const myShelfStorage = {
+  // 获取所有书架书籍ID
+  getAll: (): string[] => {
+    const data = localStorage.getItem(STORAGE_KEYS.MY_SHELF);
+    return data ? JSON.parse(data) : [];
+  },
+
+  // 添加书籍到书架
+  add: (bookId: string): void => {
+    const all = myShelfStorage.getAll();
+    if (!all.includes(bookId)) {
+      all.unshift(bookId); // 添加到开头（最新的在前面）
+      localStorage.setItem(STORAGE_KEYS.MY_SHELF, JSON.stringify(all));
+    }
+  },
+
+  // 从书架移除书籍
+  remove: (bookId: string): void => {
+    const all = myShelfStorage.getAll();
+    const filtered = all.filter(id => id !== bookId);
+    localStorage.setItem(STORAGE_KEYS.MY_SHELF, JSON.stringify(filtered));
+  },
+
+  // 检查书籍是否在书架中
+  has: (bookId: string): boolean => {
+    return myShelfStorage.getAll().includes(bookId);
+  },
+
+  // 清空书架
+  clear: (): void => {
+    localStorage.setItem(STORAGE_KEYS.MY_SHELF, JSON.stringify([]));
   },
 };

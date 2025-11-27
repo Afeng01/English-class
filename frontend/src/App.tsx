@@ -4,6 +4,7 @@ import Navigation from './components/Navigation';
 import HomePage from './components/HomePage';
 import VocabPage from './components/VocabPage';
 import ShelfPage from './components/ShelfPage';
+import MyShelfPage from './components/MyShelfPage';
 import BookDetailPage from './components/BookDetailPage';
 import ReaderPage from './components/ReaderPage';
 import UploadPage from './components/UploadPage';
@@ -12,6 +13,8 @@ import NotFoundPage from './components/NotFoundPage';
 import LoginPage from './components/LoginPage';
 import AuthCallback from './components/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
+import LearningTheoryPage from './components/LearningTheoryPage';
+import VocabTestPage from './components/VocabTestPage';
 import { useAuthStore } from './stores/useAuthStore';
 
 function App() {
@@ -63,6 +66,7 @@ function App() {
         {/* 公开路由 - 不需要登录 */}
         <Route path="/" element={<HomePage isLoggedIn={!!user} />} />
         <Route path="/shelf" element={<ShelfPage />} />
+        <Route path="/my-shelf" element={<MyShelfPage />} />
         <Route path="/book/:id" element={<BookDetailPage />} />
         <Route path="/reader" element={<ReaderPage />} />
 
@@ -71,6 +75,8 @@ function App() {
         <Route path="/upload" element={<UploadPage />} />
 
         {/* 其他路由 */}
+        <Route path="/learning-theory" element={<LearningTheoryPage />} />
+        <Route path="/vocab-test" element={<VocabTestPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

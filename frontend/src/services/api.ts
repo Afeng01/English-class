@@ -47,10 +47,19 @@ export const booksAPI = {
     api.get<{ levels: string[] }>('/books/levels/options'),
 
   // 上传书籍
-  uploadBook: (file: File, level: string) => {
+  uploadBook: (file: File, level: string, options?: { series?: string; lexile?: string; category?: 'fiction' | 'non-fiction' }) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('level', level);
+    if (options?.series) {
+      formData.append('series', options.series);
+    }
+    if (options?.lexile) {
+      formData.append('lexile', options.lexile);
+    }
+    if (options?.category) {
+      formData.append('category', options.category);
+    }
     return api.post<UploadResponse>('/books/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000, // 上传可能需要更长时间

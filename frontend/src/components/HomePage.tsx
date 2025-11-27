@@ -5,7 +5,7 @@ import { booksAPI } from '../services/api';
 import { progressStorage } from '../services/storage';
 import type { Book } from '../types';
 
-type FilterMode = 'cn' | 'us' | 'lexile';
+type LexileFilter = 'all' | '0-100' | '100-200' | '200-400' | '300-500' | '500-700' | '650-850' | '750-950' | '850-1050' | '1000+';
 
 interface HomePageProps {
   isLoggedIn: boolean;
@@ -13,7 +13,7 @@ interface HomePageProps {
 
 export default function HomePage({ isLoggedIn }: HomePageProps) {
   const navigate = useNavigate();
-  const [filterMode, setFilterMode] = useState<FilterMode>('cn');
+  const [lexileFilter, setLexileFilter] = useState<LexileFilter>('all');
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [recentBook, setRecentBook] = useState<Book | null>(null);
@@ -52,8 +52,45 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
   };
 
   const handleBookClick = (book: Book) => {
-    navigate(`/book/${book.id}`);
+    navigate(`/book/${book.id}?from=home`);
   };
+
+  // 筛选书籍（只使用蓝思值筛选）
+  const getFilteredBooks = () => {
+    if (lexileFilter === 'all') return books;
+
+    return books.filter(book => {
+      if (!book.lexile) return false;
+
+      // 提取数字部分
+      const lexileValue = parseInt(book.lexile.replace(/[^\d]/g, ''));
+
+      switch (lexileFilter) {
+        case '0-100':
+          return lexileValue >= 0 && lexileValue <= 100;
+        case '100-200':
+          return lexileValue > 100 && lexileValue <= 200;
+        case '200-400':
+          return lexileValue > 200 && lexileValue <= 400;
+        case '300-500':
+          return lexileValue > 300 && lexileValue <= 500;
+        case '500-700':
+          return lexileValue > 500 && lexileValue <= 700;
+        case '650-850':
+          return lexileValue > 650 && lexileValue <= 850;
+        case '750-950':
+          return lexileValue > 750 && lexileValue <= 950;
+        case '850-1050':
+          return lexileValue > 850 && lexileValue <= 1050;
+        case '1000+':
+          return lexileValue >= 1000;
+        default:
+          return true;
+      }
+    });
+  };
+
+  const filteredBooks = getFilteredBooks();
 
   return (
     <main className="flex-grow flex flex-col">
@@ -71,18 +108,24 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
         </div>
 
         <div className="flex flex-wrap justify-center gap-5">
-          <button className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:border-teal-600 hover:text-teal-600 transition-all text-sm">
+          <button
+            onClick={() => navigate('/learning-theory')}
+            className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:border-teal-600 hover:text-teal-600 transition-all text-sm"
+          >
             <Lightbulb className="inline w-4 h-4 mr-2" />
             学习原理
           </button>
           <button
             className="px-8 py-2.5 rounded-lg bg-teal-700 text-white shadow-lg hover:bg-teal-800 hover:-translate-y-0.5 transition-all text-base font-medium"
-            onClick={() => navigate('/reader')}
+            onClick={() => navigate(isLoggedIn ? '/my-shelf' : '/shelf')}
           >
             <BookOpen className="inline w-5 h-5 mr-2" />
-            开始阅读
+            {isLoggedIn ? '继续阅读' : '开始阅读'}
           </button>
-          <button className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:border-teal-600 hover:text-teal-600 transition-all text-sm">
+          <button
+            onClick={() => navigate('/vocab-test')}
+            className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:border-teal-600 hover:text-teal-600 transition-all text-sm"
+          >
             <CheckCircle className="inline w-4 h-4 mr-2" />
             词汇检测
           </button>
@@ -97,7 +140,7 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
               <h2 className="text-lg font-bold text-gray-800">继续阅读</h2>
             </div>
             <button
-              onClick={() => navigate('/shelf')}
+              onClick={() => navigate('/my-shelf')}
               className="text-sm text-teal-700 hover:underline"
             >
               查看全部
@@ -199,112 +242,95 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
             <BookMarked className="text-amber-600 w-5 h-5" />
             <h2 className="text-lg font-bold text-gray-800">书架资源</h2>
           </div>
-
-          <div className="bg-gray-200 p-1 rounded-lg flex text-sm font-medium">
-            <button
-              onClick={() => setFilterMode('cn')}
-              className={`px-4 py-1.5 rounded-md transition-all ${
-                filterMode === 'cn' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              中国年级
-            </button>
-            <button
-              onClick={() => setFilterMode('us')}
-              className={`px-4 py-1.5 rounded-md transition-all ${
-                filterMode === 'us' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              美国年级
-            </button>
-            <button
-              onClick={() => setFilterMode('lexile')}
-              className={`px-4 py-1.5 rounded-md transition-all ${
-                filterMode === 'lexile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              蓝思值
-            </button>
-          </div>
+          <span className="text-sm text-gray-500">依据蓝思值进行分类</span>
         </div>
 
-        {filterMode === 'cn' && (
-          <div className="flex flex-wrap gap-2 mb-8">
-            <button className="px-4 py-1.5 rounded-full bg-teal-600 text-white text-sm shadow-sm">全部</button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              小学 1-3 年级
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              小学 4-6 年级
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              初中 1 年级
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              初中 2 年级
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              初中 3 年级
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 hover:border-teal-500 hover:text-teal-600 text-gray-600 text-sm transition-colors">
-              高中 1 年级
-            </button>
-          </div>
-        )}
-
-        {filterMode === 'us' && (
-          <div className="flex flex-wrap gap-2 mb-8">
-            <button className="px-4 py-1.5 rounded-full bg-teal-600 text-white text-sm shadow-sm">All</button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              Pre-K
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              1st Grade
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              2nd Grade
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              3rd Grade
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              4th Grade
-            </button>
-          </div>
-        )}
-
-        {filterMode === 'lexile' && (
-          <div className="flex flex-wrap gap-2 mb-8">
-            <button className="px-4 py-1.5 rounded-full bg-teal-600 text-white text-sm shadow-sm">All</button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              BR - 100L
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              200L - 400L
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              500L - 700L
-            </button>
-            <button className="px-4 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 text-sm">
-              1000L+
-            </button>
-          </div>
-        )}
+        {/* 蓝思值筛选按钮 */}
+        <div className="flex flex-wrap gap-3 mb-8">
+          <button
+            onClick={() => setLexileFilter('all')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === 'all' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            全部
+          </button>
+          <button
+            onClick={() => setLexileFilter('0-100')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '0-100' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            0-100L
+          </button>
+          <button
+            onClick={() => setLexileFilter('100-200')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '100-200' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            100-200L
+          </button>
+          <button
+            onClick={() => setLexileFilter('200-400')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '200-400' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            200-400L
+          </button>
+          <button
+            onClick={() => setLexileFilter('300-500')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '300-500' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            300-500L
+          </button>
+          <button
+            onClick={() => setLexileFilter('500-700')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '500-700' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            500-700L
+          </button>
+          <button
+            onClick={() => setLexileFilter('1000+')}
+            className={`text-sm font-medium transition-colors ${
+              lexileFilter === '1000+' ? 'text-teal-700 underline' : 'text-gray-600 hover:text-teal-700 hover:underline'
+            }`}
+          >
+            1000L+
+          </button>
+        </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {loading ? (
             <div className="col-span-full text-center py-10 text-gray-500">加载中...</div>
-          ) : books.length === 0 ? (
+          ) : filteredBooks.length === 0 ? (
             <div className="col-span-full text-center py-10 text-gray-500">暂无书籍</div>
           ) : (
-            books.map((book, index) => (
-              <BookCard
-                key={book.id}
-                book={book}
-                color={['teal', 'blue', 'purple', 'green', 'pink', 'indigo'][index % 6]}
-                onClick={() => handleBookClick(book)}
-              />
-            ))
+            <>
+              {filteredBooks.slice(0, 10).map((book, index) => (
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  color={['teal', 'blue', 'purple', 'green', 'pink', 'indigo'][index % 6]}
+                  onClick={() => handleBookClick(book)}
+                />
+              ))}
+              {filteredBooks.length > 10 && (
+                <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex justify-end mt-4">
+                  <button
+                    onClick={() => navigate('/shelf')}
+                    className="text-sm text-teal-700 hover:underline font-medium"
+                  >
+                    查看全部 →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -340,9 +366,11 @@ function BookCard({ book, color, onClick }: BookCardProps) {
         ) : (
           <BookOpen className={`w-12 h-12 ${colors.text}`} />
         )}
-        {book.level && (
-          <div className={`absolute top-2 right-2 ${colors.badge} text-[10px] font-bold px-1.5 py-0.5 rounded`}>
-            {book.level}
+        {book.lexile && (
+          <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
+            <div className="absolute top-3 right-[-20px] w-24 bg-blue-500 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
+              {book.lexile}
+            </div>
           </div>
         )}
       </div>

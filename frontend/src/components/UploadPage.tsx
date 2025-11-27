@@ -18,16 +18,21 @@ export default function UploadPage() {
   }, [user, navigate]);
 
   const [file, setFile] = useState<File | null>(null);
-  const [level, setLevel] = useState('一年级');
+  const [series, setSeries] = useState('');
+  const [customSeries, setCustomSeries] = useState('');
+  const [lexile, setLexile] = useState('');
+  const [category, setCategory] = useState<'fiction' | 'non-fiction' | ''>('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-
-  const levelOptions = [
-    '学前', '一年级', '二年级', '三年级', '四年级', '五年级', '六年级',
-    '初一', '初二', '初三', '高一', '高二', '高三'
-  ];
+  const [availableSeries] = useState<string[]>([
+    'Magic Tree House',
+    'Oxford Reading Tree',
+    'Harry Potter',
+    'Percy Jackson',
+    'Diary of a Wimpy Kid'
+  ]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -73,8 +78,8 @@ export default function UploadPage() {
       return;
     }
 
-    if (!level) {
-      setError('请选择难度等级');
+    if (!lexile) {
+      setError('请填写蓝思值');
       return;
     }
 
@@ -82,9 +87,34 @@ export default function UploadPage() {
     setError(null);
 
     try {
-      await booksAPI.uploadBook(file, level);
+      // 验证书籍是否已存在
+      const bookTitle = file.name.replace('.epub', '').trim();
+      const booksResponse = await booksAPI.getBooks();
+      const existingBook = booksResponse.data.find(
+        book => book.title.toLowerCase() === bookTitle.toLowerCase()
+      );
+
+      if (existingBook) {
+        setError('当前书籍已存在资源库，可通过查找搜寻');
+        setUploading(false);
+        return;
+      }
+
+      const finalSeries = customSeries || series;
+      const options: { series?: string; lexile: string; category?: 'fiction' | 'non-fiction' } = {
+        lexile
+      };
+      if (finalSeries) options.series = finalSeries;
+      if (category) options.category = category;
+
+      // Note: 后端仍需要level参数，这里传默认值"学前"
+      await booksAPI.uploadBook(file, '学前', options);
       setSuccess(true);
       setFile(null);
+      setSeries('');
+      setCustomSeries('');
+      setLexile('');
+      setCategory('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -161,21 +191,72 @@ export default function UploadPage() {
           </div>
         )}
 
-        {/* 难度等级选择 */}
+        {/* 蓝思值（必填） */}
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            难度等级
+            蓝思值 <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={lexile}
+            onChange={(e) => setLexile(e.target.value)}
+            placeholder="例如：500L、BR200L等"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            如何查看书籍
+            <a
+              href="https://hub.lexile.com/find-a-book"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-teal-700 hover:underline mx-1"
+            >
+              蓝思值
+            </a>
+            ?
+          </p>
+        </div>
+
+        {/* 系列名称（可选） */}
+        <div className="mt-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            系列名称 <span className="text-gray-400 text-xs">(可选)</span>
           </label>
           <select
-            value={level}
-            onChange={(e) => setLevel(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+            value={series}
+            onChange={(e) => setSeries(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none mb-2"
           >
-            {levelOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
+            <option value="">选择已有系列</option>
+            {availableSeries.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
+          </select>
+          <input
+            type="text"
+            value={customSeries}
+            onChange={(e) => setCustomSeries(e.target.value)}
+            placeholder="或输入自定义系列名称"
+            disabled={!!series}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
+        </div>
+
+        {/* 书籍分类（可选） */}
+        <div className="mt-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            书籍分类 <span className="text-gray-400 text-xs">(可选)</span>
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as 'fiction' | 'non-fiction' | '')}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+          >
+            <option value="">请选择</option>
+            <option value="fiction">虚构类 (Fiction)</option>
+            <option value="non-fiction">非虚构类 (Non-Fiction)</option>
           </select>
         </div>
 

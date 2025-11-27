@@ -5,10 +5,13 @@ export interface Book {
   author: string;
   cover?: string;
   level?: string;
+  lexile?: string; // 蓝思值，如 "200L", "450L", "1000L"
   word_count: number;
   description?: string;
   epub_path?: string;
   created_at: string;
+  category?: 'fiction' | 'non-fiction'; // 分类：虚构类 | 非虚构类
+  series?: string; // 系列，如 "Magic Tree House"
 }
 
 // 章节类型

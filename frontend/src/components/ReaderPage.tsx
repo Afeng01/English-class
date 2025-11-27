@@ -615,14 +615,34 @@ export default function ReaderPage() {
             : 'bg-[#FDFBF7] border-[#EAE4D6]'
         } ${showTopBar ? 'top-0' : '-top-14'}`}
       >
-          {/* 左侧：返回、目录 */}
+          {/* 左侧：返回、主页、目录 */}
           <div className="flex items-center gap-3">
             <button
               title="返回"
               className={`${theme === 'dark' ? 'text-gray-400 hover:text-teal-400' : 'text-gray-500 hover:text-teal-700'}`}
-              onClick={() => navigate('/')}
+              onClick={() => {
+                const from = searchParams.get('from');
+                const bookId = searchParams.get('bookId');
+
+                if (from === 'book-detail' && bookId) {
+                  navigate(`/book/${bookId}`);
+                } else if (from === 'my-shelf') {
+                  navigate('/my-shelf');
+                } else {
+                  navigate('/');
+                }
+              }}
             >
               <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              title="回到主页"
+              onClick={() => navigate('/')}
+              className={`${theme === 'dark' ? 'text-gray-400 hover:text-teal-400' : 'text-gray-500 hover:text-teal-700'}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
             </button>
             <button
               title="目录"

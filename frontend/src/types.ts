@@ -15,6 +15,9 @@ export interface Book {
   word_count: number;
   epub_path?: string;
   created_at: string;
+  series?: string;
+  lexile?: string;
+  category?: 'fiction' | 'non-fiction';
 }
 
 // 章节信息
