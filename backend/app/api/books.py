@@ -9,6 +9,7 @@ import logging
 from app.models.database import get_db, Book, Chapter, BookVocabulary
 from app.schemas.schemas import BookResponse, BookDetailResponse, ChapterResponse, VocabularyResponse
 from app.utils.oss_helper import oss_helper
+from app.utils.supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,17 @@ async def get_books(
     search: Optional[str] = Query(None, description="搜索书名"),
     db: Session = Depends(get_db)
 ):
-    """获取书籍列表"""
+    """获取书籍列表（优先使用Supabase，备选SQLite）"""
+    # 优先使用Supabase
+    if supabase_client.enabled:
+        try:
+            books_data = supabase_client.list_books(level=level, search=search)
+            logger.info(f"✅ 从Supabase获取书籍列表: {len(books_data)} 本")
+            return books_data
+        except Exception as e:
+            logger.error(f"⚠️ Supabase查询失败，回退到SQLite: {e}")
+
+    # 回退到SQLite
     query = db.query(Book)
 
     if level:
@@ -36,36 +47,72 @@ async def get_books(
         query = query.filter(Book.title.ilike(f"%{search}%"))
 
     books = query.order_by(Book.created_at.desc()).all()
+    logger.info(f"从SQLite获取书籍列表: {len(books)} 本")
     return books
 
 
 @router.get("/{book_id}", response_model=BookDetailResponse)
 async def get_book(book_id: str, db: Session = Depends(get_db)):
-    """获取书籍详情"""
+    """获取书籍详情（优先使用Supabase，备选SQLite）"""
+    # 优先使用Supabase
+    if supabase_client.enabled:
+        try:
+            book_data = supabase_client.get_book(book_id)
+            if book_data:
+                logger.info(f"✅ 从Supabase获取书籍详情: {book_data.get('title')}")
+                return book_data
+        except Exception as e:
+            logger.error(f"⚠️ Supabase查询失败，回退到SQLite: {e}")
+
+    # 回退到SQLite
     book = db.query(Book).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    logger.info(f"从SQLite获取书籍详情: {book.title}")
     return book
 
 
 @router.get("/{book_id}/chapters", response_model=List[ChapterResponse])
 async def get_book_chapters(book_id: str, db: Session = Depends(get_db)):
-    """获取书籍章节列表"""
+    """获取书籍章节列表（优先使用Supabase，备选SQLite）"""
+    # 优先使用Supabase
+    if supabase_client.enabled:
+        try:
+            chapters_data = supabase_client.get_chapters(book_id)
+            logger.info(f"✅ 从Supabase获取章节列表: {len(chapters_data)} 章")
+            return chapters_data
+        except Exception as e:
+            logger.error(f"⚠️ Supabase查询失败，回退到SQLite: {e}")
+
+    # 回退到SQLite
     chapters = db.query(Chapter).filter(
         Chapter.book_id == book_id
     ).order_by(Chapter.chapter_number).all()
+    logger.info(f"从SQLite获取章节列表: {len(chapters)} 章")
     return chapters
 
 
 @router.get("/{book_id}/chapters/{chapter_number}", response_model=ChapterResponse)
 async def get_chapter(book_id: str, chapter_number: int, db: Session = Depends(get_db)):
-    """获取指定章节内容"""
+    """获取指定章节内容（优先使用Supabase，备选SQLite）"""
+    # 优先使用Supabase
+    if supabase_client.enabled:
+        try:
+            chapter_data = supabase_client.get_chapter(book_id, chapter_number)
+            if chapter_data:
+                logger.info(f"✅ 从Supabase获取章节: {chapter_data.get('title', f'Chapter {chapter_number}')}")
+                return chapter_data
+        except Exception as e:
+            logger.error(f"⚠️ Supabase查询失败，回退到SQLite: {e}")
+
+    # 回退到SQLite
     chapter = db.query(Chapter).filter(
         Chapter.book_id == book_id,
         Chapter.chapter_number == chapter_number
     ).first()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
+    logger.info(f"从SQLite获取章节: {chapter.title}")
     return chapter
 
 
@@ -75,10 +122,21 @@ async def get_book_vocabulary(
     limit: int = Query(50, description="返回词汇数量限制"),
     db: Session = Depends(get_db)
 ):
-    """获取书籍高频词汇"""
+    """获取书籍高频词汇（优先使用Supabase，备选SQLite）"""
+    # 优先使用Supabase
+    if supabase_client.enabled:
+        try:
+            vocab_data = supabase_client.get_book_vocabulary(book_id, limit=limit)
+            logger.info(f"✅ 从Supabase获取词汇: {len(vocab_data)} 个")
+            return vocab_data
+        except Exception as e:
+            logger.error(f"⚠️ Supabase查询失败，回退到SQLite: {e}")
+
+    # 回退到SQLite
     vocabulary = db.query(BookVocabulary).filter(
         BookVocabulary.book_id == book_id
     ).order_by(BookVocabulary.frequency.desc()).limit(limit).all()
+    logger.info(f"从SQLite获取词汇: {len(vocabulary)} 个")
     return vocabulary
 
 
@@ -95,7 +153,7 @@ async def upload_book(
     db: Session = Depends(get_db)
 ):
     """
-    上传EPUB书籍
+    上传EPUB书籍（自动同步到Supabase和SQLite）
 
     - **file**: EPUB格式的电子书文件
     - **level**: 难度等级（如：学前、一年级、初一等）
@@ -118,17 +176,34 @@ async def upload_book(
             content = await file.read()
             buffer.write(content)
 
-        # 导入书籍
+        # 导入书籍（import_book.py会自动同步到Supabase）
         from scripts.import_book import import_epub
         book_id = import_epub(temp_path, level)
 
-        # 获取导入的书籍信息
-        book = db.query(Book).filter(Book.id == book_id).first()
+        # 优先从Supabase获取书籍信息
+        book_info = None
+        if supabase_client.enabled:
+            try:
+                book_data = supabase_client.get_book(book_id)
+                if book_data:
+                    # 获取章节数量
+                    chapters = supabase_client.get_chapters(book_id)
+                    book_info = {
+                        "id": book_data['id'],
+                        "title": book_data['title'],
+                        "author": book_data['author'],
+                        "level": book_data['level'],
+                        "word_count": book_data['word_count'],
+                        "chapter_count": len(chapters)
+                    }
+                    logger.info(f"✅ 从Supabase获取上传书籍信息: {book_data['title']}")
+            except Exception as e:
+                logger.warning(f"⚠️ Supabase获取书籍信息失败，使用SQLite: {e}")
 
-        return {
-            "success": True,
-            "message": "书籍上传成功",
-            "book": {
+        # 如果Supabase失败，从SQLite获取
+        if not book_info:
+            book = db.query(Book).filter(Book.id == book_id).first()
+            book_info = {
                 "id": book.id,
                 "title": book.title,
                 "author": book.author,
@@ -136,6 +211,12 @@ async def upload_book(
                 "word_count": book.word_count,
                 "chapter_count": len(book.chapters)
             }
+            logger.info(f"从SQLite获取上传书籍信息: {book.title}")
+
+        return {
+            "success": True,
+            "message": "书籍上传成功",
+            "book": book_info
         }
 
     except Exception as e:
@@ -149,16 +230,23 @@ async def upload_book(
 
 @router.delete("/{book_id}")
 async def delete_book(book_id: str, db: Session = Depends(get_db)):
-    """删除书籍"""
+    """删除书籍（同时从Supabase和SQLite删除）"""
+    # 先从SQLite检查书籍是否存在
     book = db.query(Book).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="书籍不存在")
 
     try:
-        # 删除相关的章节
-        db.query(Chapter).filter(Chapter.book_id == book_id).delete()
+        # 删除Supabase中的数据
+        if supabase_client.enabled:
+            try:
+                supabase_client.delete_book(book_id)
+                logger.info(f"✅ 已从Supabase删除书籍: {book_id}")
+            except Exception as e:
+                logger.warning(f"⚠️ Supabase删除失败（继续删除SQLite）: {e}")
 
-        # 删除相关的词汇
+        # 删除SQLite中的相关数据
+        db.query(Chapter).filter(Chapter.book_id == book_id).delete()
         db.query(BookVocabulary).filter(BookVocabulary.book_id == book_id).delete()
 
         # 删除OSS图片
@@ -174,6 +262,7 @@ async def delete_book(book_id: str, db: Session = Depends(get_db)):
         db.delete(book)
         db.commit()
 
+        logger.info(f"✅ 书籍删除成功: {book_id}")
         return {"success": True, "message": "书籍删除成功"}
 
     except Exception as e:

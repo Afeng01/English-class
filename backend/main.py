@@ -78,5 +78,7 @@ async def startup():
         print("✅ NLTK数据下载完成")
 
 @app.get("/")
+@app.head("/")
 async def root():
+    """健康检查端点，支持GET和HEAD请求（用于UptimeRobot等监控服务）"""
     return {"message": "English Reading App API"}
