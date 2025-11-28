@@ -1,8 +1,10 @@
 import axios from 'axios';
 import type { Book, BookDetail, Chapter, Vocabulary, DictionaryResult } from '../types';
 
+// API基础URL配置
+// 生产环境使用环境变量 VITE_API_BASE_URL，开发环境使用代理 '/api'
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 10000,
 });
 

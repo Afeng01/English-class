@@ -16,9 +16,15 @@ from app.config import oss_config
 app = FastAPI(title="English Reading App API", version="1.0.0")
 
 # CORS 配置
+# 从环境变量读取允许的源，支持生产环境动态配置
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"  # 默认本地开发环境
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[origin.strip() for origin in allowed_origins],  # 去除可能的空格
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
