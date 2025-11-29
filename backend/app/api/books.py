@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -7,7 +8,15 @@ import shutil
 import logging
 
 from app.models.database import get_db, Book, Chapter, BookVocabulary
-from app.schemas.schemas import BookResponse, BookDetailResponse, ChapterResponse, VocabularyResponse
+from app.schemas.schemas import (
+    BookResponse,
+    BookDetailResponse,
+    ChapterResponse,
+    VocabularyResponse,
+    BookDuplicateCheck,
+    BookDuplicateResponse,
+    BookDuplicateInfo,
+)
 from app.utils.oss_helper import oss_helper
 from app.utils.supabase_client import supabase_client
 
@@ -20,6 +29,28 @@ LEVEL_OPTIONS = [
     "学前", "一年级", "二年级", "三年级", "四年级", "五年级", "六年级",
     "初一", "初二", "初三", "高一", "高二", "高三"
 ]
+
+
+def _normalize_text(value: Optional[str]) -> str:
+    """统一处理字符串比较：去除首尾空格并转为小写"""
+    return (value or "").strip().lower()
+
+
+def _build_duplicate_info(book_source) -> BookDuplicateInfo:
+    """将Supabase或SQLite返回的书籍对象转换为响应结构"""
+    if isinstance(book_source, Book):
+        return BookDuplicateInfo(
+            id=book_source.id,
+            title=book_source.title,
+            author=book_source.author,
+            cover=book_source.cover,
+        )
+    return BookDuplicateInfo(
+        id=book_source.get("id"),
+        title=book_source.get("title"),
+        author=book_source.get("author"),
+        cover=book_source.get("cover"),
+    )
 
 
 @router.get("", response_model=List[BookResponse])
@@ -144,6 +175,58 @@ async def get_book_vocabulary(
 async def get_level_options():
     """获取难度等级选项列表"""
     return {"levels": LEVEL_OPTIONS}
+
+
+@router.post("/check-duplicate", response_model=BookDuplicateResponse)
+async def check_duplicate_book(payload: BookDuplicateCheck, db: Session = Depends(get_db)):
+    """
+    检查上传书籍是否重复：
+    - 标题、作者均使用 strip + lower 的方式标准化
+    - 优先访问 Supabase，失败时自动回退 SQLite
+    - 命中则返回最早创建的书籍信息（id/title/author/cover）
+    """
+    normalized_title = _normalize_text(payload.title)
+    if not normalized_title:
+        raise HTTPException(status_code=400, detail="标题不能为空")
+    normalized_author = _normalize_text(payload.author)
+
+    # 先在 Supabase 中查找重复数据（若已启用）
+    if supabase_client.enabled and supabase_client.client:
+        try:
+            title_keyword = payload.title.strip()
+            query = supabase_client.client.table("books")\
+                .select("id,title,author,cover,created_at")\
+                .order("created_at", desc=False)
+            if title_keyword:
+                query = query.ilike("title", f"%{title_keyword}%")
+            result = query.execute()
+
+            for record in result.data or []:
+                if _normalize_text(record.get("title")) != normalized_title:
+                    continue
+                if normalized_author and _normalize_text(record.get("author")) != normalized_author:
+                    continue
+                logger.info(f"✅ Supabase命中重复书籍: {record.get('id')}")
+                return BookDuplicateResponse(exists=True, book=_build_duplicate_info(record))
+        except Exception as e:
+            logger.warning(f"⚠️ Supabase重复检测失败，回退到SQLite: {e}")
+
+    # Supabase未命中或不可用，继续使用SQLite精确比对
+    try:
+        title_expr = func.lower(func.trim(Book.title))
+        query = db.query(Book).filter(title_expr == normalized_title)
+        if normalized_author:
+            author_expr = func.lower(func.trim(Book.author))
+            query = query.filter(author_expr == normalized_author)
+        duplicate_book = query.order_by(Book.created_at.asc()).first()
+        if duplicate_book:
+            logger.info(f"✅ SQLite命中重复书籍: {duplicate_book.id}")
+            return BookDuplicateResponse(exists=True, book=_build_duplicate_info(duplicate_book))
+    except Exception as e:
+        logger.error(f"❌ SQLite重复检测失败: {e}")
+        raise HTTPException(status_code=500, detail="检查书籍重复失败，请稍后重试")
+
+    return BookDuplicateResponse(exists=False, book=None)
 
 
 @router.post("/upload")

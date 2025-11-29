@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # 加载.env文件中的环境变量
 load_dotenv()
 
-from app.api import books, dictionary
+from app.api import books, dictionary, admin
 from app.models.database import create_tables
 from app.utils.oss_helper import oss_helper
 from app.config import oss_config
@@ -38,6 +38,7 @@ if os.path.exists(data_path):
 # 注册路由
 app.include_router(books.router, prefix="/api/books", tags=["books"])
 app.include_router(dictionary.router, prefix="/api/dictionary", tags=["dictionary"])
+app.include_router(admin.router, prefix="/api", tags=["admin"])
 
 @app.on_event("startup")
 async def startup():

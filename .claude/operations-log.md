@@ -1,3 +1,66 @@
+## 管理员配置与文档补全日志
+记录时间: 2025-11-29 14:10 (UTC+8)
+
+### 工具留痕
+- 14:05 `shell:nl -ba frontend/src/components/Navigation.tsx` → 查看导航结构，定位链接插入位置。
+- 14:05 `apply_patch`（目标=`backend/.env.example`）→ 添加 `ADMIN_MODE` 示例配置。
+- 14:05 `apply_patch`（目标=`frontend/.env.local`）→ 添加 `VITE_ADMIN_MODE` 示例配置与注释。
+- 14:06 `apply_patch`（目标=`frontend/src/components/Navigation.tsx`）→ 导入 `AlertTriangle` 并按环境变量显示管理员入口。
+- 14:07 `apply_patch`（目标=`ADMIN_GUIDE.md`）→ 新增管理员指南文档，涵盖配置、功能与风险提示。
+- 14:08 `shell:cat .gitignore` → 检查现有忽略规则。
+- 14:08 `apply_patch`（目标=`.gitignore`）→ 增加 `backend/data/backups/` 忽略项。
+
+### 实施要点
+1. 保持前后端环境变量一致，新增 `ADMIN_MODE`/`VITE_ADMIN_MODE` 默认 true（仅供本地调试），并在文档中强调线上需关闭。
+2. 导航栏依据 `VITE_ADMIN_MODE` 决定是否渲染“管理员”入口，使用警示色与图标提示敏感性。
+3. `ADMIN_GUIDE.md` 记录启用步骤、功能说明、风险警告与故障排查，方便团队操作；同时将备份目录加入 `.gitignore` 防止误提交。
+
+---
+
+## 管理员前端界面实现日志
+记录时间: 2025-11-29 14:07 (UTC+8)
+
+### 工具留痕
+- 13:58 `shell:rg "<Toast" -n frontend/src` → 检索 Toast 组件使用方式，掌握通知调用模式。
+- 13:59 `apply_patch`（新建 `frontend/src/components/ui/Table.tsx`）→ 实现可选择的通用表格。
+- 13:59 `apply_patch`（新建 `frontend/src/components/ui/Dialog.tsx`）→ 实现可复用弹窗与 ESC 关闭逻辑。
+- 14:00 `apply_patch`（修改 `frontend/src/types/index.ts`）→ 补充管理员 API 的响应类型。
+- 14:00 `apply_patch`（修改 `frontend/src/services/api.ts`）→ 添加 `adminAPI` 封装。
+- 14:01 `apply_patch`（新建 `frontend/src/pages/AdminPage.tsx`）→ 构建管理员界面、对话框状态与操作流程。
+- 14:02 `apply_patch`（修改 `frontend/src/App.tsx`）→ 注册 `/admin` 受保护路由。
+- 14:04 `shell:npm run build`（workdir=`frontend/`）→ 执行前端生产构建，确认 TypeScript 通过，出现 Browserslist 更新提示（非阻塞）。
+
+### 实施要点
+1. AdminPage 复用新建 Table/Dialog 组件，实现书籍全选/多选、备份、删除、自动备份勾选、进度提示及结果列举，同时使用 Toast 输出操作提醒。
+2. Table 组件支持可选行、空状态提示；Dialog 组件提供遮罩、ESC 关闭、统一页眉页脚，便于后续管理员功能扩展。
+3. `adminAPI` 集中封装管理员端点，类型信息源自 `frontend/src/types/index.ts`，确保请求/响应有 TS 约束。
+4. `/admin` 路由受 `ProtectedRoute` 保护，构建完成通过 `npm run build` 验证整体无编译错误。
+
+---
+
+## 管理员API与备份功能实现日志
+记录时间: 2025-11-29 14:01 (UTC+8)
+
+### 工具留痕
+- 13:55 `shell:sed -n '1,200p' backend/main.py` → 检查现有 FastAPI 路由注册情况。
+- 13:55 `shell:sed -n '1,240p' backend/app/schemas/schemas.py` → 确认可复用的 BookResponse 并规划新增 Pydantic 模型。
+- 13:56 `shell:sed -n '1,260p' backend/app/api/books.py` → 阅读 `delete_book` 逻辑，评估批量删除复用方式。
+- 13:57 `shell:ls backend/app/services` → 确认暂无 service 层实现，决定直接复用现有 router 函数。
+- 13:58 `apply_patch`（目标=`backend/app/schemas/schemas.py`）→ 添加 Backup/AdminDelete 请求与响应模型。
+- 13:59 `apply_patch`（目标=`backend/app/middleware/admin_check.py`）→ 新建管理员模式校验依赖，基于 `ADMIN_MODE` 环境变量控制访问。
+- 14:00 `apply_patch`（目标=`backend/app/api/admin.py`）→ 实现管理员 API 路由、备份/删除逻辑与辅助函数。
+- 14:00 `apply_patch`（目标=`backend/app/middleware/__init__.py`）→ 创建包初始化，确保可导入。
+- 14:00 `apply_patch`（目标=`backend/main.py`）→ 注册 `/api/admin` 路由。
+- 14:01 `git status -sb` → 确认新增文件与既有变更。
+
+### 实施要点
+1. 通过 `require_admin_mode` 中间件强制 `ADMIN_MODE=true` 才能访问管理员端点，并记录每次调用的 client 与 path。
+2. `admin.py` 提供三个端点：列出全部书籍、批量备份、批量删除；备份功能会加载章节/词汇并输出 JSON，删除逻辑在需要时先执行备份再复用 `books.delete_book`。
+3. 备份文件写入 `backend/data/backups/`，文件名含书籍 ID 与 UTC 时间戳，响应中返回规范化路径和文件大小；失败项独立统计，且不会阻塞其他书籍。
+4. 新增的 Pydantic 模型覆盖备份/删除请求与响应，统一序列化结构并提供失败原因列表，便于前端展示。
+
+---
+
 ## 阅读器界面优化操作日志
 生成时间: 2025-11-26
 
@@ -78,6 +141,11 @@ const dragStartWidth = useRef(0);
 
 #### 导入清理
 移除了未使用的图标导入:
+
+---
+
+### 2025-11-29 13:40 Codex
+- [ReaderPage.tsx] 新增 `buildChapterUrl` 工具函数并在上一章/下一章及目录跳转中调用，保持 `from`、`bookId` 等现有查询参数，避免返回按钮因 URL 被替换而只剩默认首页行为。
 - 删除: `Type, ArrowLeft, Move`
 - 保留: `GripVertical, PanelRightOpen, PanelRightClose`
 
@@ -320,6 +388,27 @@ SQLite + Supabase → 两个数据库都包含完整字段
 
 ---
 
+## 章节图片URL修复操作日志
+生成时间: 2025-11-29 13:54 (UTC+8)
+
+### 工具调用留痕
+- 13:42 `cat .claude/context-initial.json` → 阅读既有上下文，确认数据库与章节结构信息
+- 13:46 `apply_patch backend/scripts/fix_chapter_image_urls.py` → 新增批量替换脚本，包含日志与 Supabase 同步
+- 13:47 `python backend/scripts/fix_chapter_image_urls.py` → 执行脚本时报错 `ModuleNotFoundError: sqlalchemy`
+- 13:48 `python -m ensurepip --upgrade` → 由于 UV 缓存目录不可写导致 pip 安装失败
+- 13:50 `python -m venv .venv` → 在仓库内创建虚拟环境以隔离依赖
+- 13:52 `.venv/bin/pip install -r backend/requirements.txt` → 网络被限制，无法下载 fastapi/SQLAlchemy 导致依赖安装失败
+
+### 当前进展
+- ✅ 新脚本 `backend/scripts/fix_chapter_image_urls.py` 已创建，可在依赖就绪后执行
+- ⚠️ 受限于环境无法安装 SQLAlchemy/fastapi，脚本暂未能跑通，数据库仍需修复
+
+### 建议
+1. 在可联网的环境执行 `pip install -r backend/requirements.txt` 后再次运行脚本
+2. 或在已有依赖的机器上直接运行 `python backend/scripts/fix_chapter_image_urls.py`
+
+---
+
 ## 蓝思值功能完善与level字段清理
 操作时间：2025-11-28 20:22
 
@@ -347,3 +436,74 @@ SQLite + Supabase → 两个数据库都包含完整字段
 2. 访问书籍详情页验证目录和蓝思值显示
 3. 检查我的书架页面的徽章显示
 4. 测试边界情况（无lexile值的书籍）
+
+---
+
+## 书籍去重脚本开发日志
+记录时间: 2025-11-29 13:35 (UTC+8)
+
+### 工具留痕
+- `shell:sed`（读取 `backend/app/models/database.py` 与 `backend/app/api/books.py` 删除逻辑，确认需复用的依赖）
+- `shell:python backend/scripts/deduplicate_books.py --dry-run`（在 `.venv` 中执行，产出首份去重日志）
+
+### 实施要点
+1. 在 `backend/scripts/deduplicate_books.py` 新增去重脚本，封装标题归一化、保留规则（封面优先 + 创建时间最早）、Supabase/SQLite/图片删除与日志写入。
+2. 通过 argparse 支持 `--dry-run`，同时按照 UTC+8 在 `.claude/deduplication-log-*.md` 输出分组详情、保留/删除决策与操作结果。
+3. Dry Run 验证过程中定位到 3 组重复书籍，脚本正确输出组装日志并打印实时进度，现可去除 `--dry-run` 执行真实删除。
+
+---
+
+## 上传重复检测API实现
+记录时间: 2025-11-29 14:10 (UTC+8)
+
+### 工具留痕
+- `shell:sed`（定位 `backend/app/schemas/schemas.py` 与 `backend/app/api/books.py` 插桩位置）
+
+### 实施要点
+1. 新增 `BookDuplicateCheck/BookDuplicateResponse/BookDuplicateInfo` Pydantic Schema，明确请求结构与响应的精简书籍信息，便于复用。
+2. 在 `books` API 中实现 `POST /api/books/check-duplicate`：封装 `_normalize_text` 与 `_build_duplicate_info`，先命中 Supabase（`ilike + created_at` 升序）后再回退 SQLite（`func.lower(func.trim())` 精确匹配），并在日志中输出命中来源。
+3. 端点返回 `exists` 布尔值及可选 `book` 对象，任何数据库异常直接抛出 500，确保前端能感知失败状态。
+
+---
+
+## 前端上传前重复检查
+记录时间: 2025-11-29 14:40 (UTC+8)
+
+### 工具留痕
+- `shell:sed`（阅读 `frontend/src/services/api.ts`、`frontend/src/components/UploadPage.tsx` 结构与现有交互）
+
+### 实施要点
+1. `booksAPI` 新增 `checkDuplicate` 方法，对接后端 `POST /books/check-duplicate` 并声明 `DuplicateCheckResponse`，统一复用 axios。
+2. `UploadPage` 在 `handleFile` 后立刻调用 `checkDuplicate`，期间展示 `Loader2` 加载提示，并根据结果弹出遮罩式提示框（含“确定/查看书籍”按钮）。
+3. 网络错误通过黄色提示条告知“可继续上传”，避免强制阻塞；上传按钮在重复检查或上传中均禁用，防止并发提交。
+
+---
+
+## 章节图片迁移扩展操作日志
+记录时间: 2025-11-29 13:43 (Codex)
+
+### 工具留痕
+- 13:41 `shell:ls`（workdir=`/Users/cherry_xiao/Documents/Code-project/English-Class`）→ 列出仓库根目录，确认 AGENTS.md 与 backend/frontend 结构。
+- 13:41 `shell:ls -a`（同上）→ 查看隐藏文件，确认 `.claude` 目录存在。
+- 13:41 `shell:ls .claude`（同上）→ 获取上下文文件清单，定位 `context-initial.json`。
+- 13:42 `shell:cat .claude/context-initial.json` → 阅读主 AI 上下文，掌握书籍目录与蓝思值修复背景。
+- 13:42 `shell:cat .claude/operations-log.md` → 参考既有日志格式，准备追加记录。
+- 13:43 `shell:date "+%Y-%m-%d %H:%M:%S %Z"` → 获取当前 CST 时间戳，确保后续日志注明准确时间。
+- 13:43 `apply_patch`（目标=`.claude/operations-log.md`）→ 追加“章节图片迁移扩展操作日志”，记录工具调用与任务背景。
+- 13:44 `apply_patch`（目标=`.claude/operations-log.md`）→ 在同一日志中补记 `apply_patch` 工具留痕，确保工具链记录完整。
+- 13:45 `shell:sed -n '1,200p' backend/scripts/migrate_images_to_oss.py` → 阅读封面迁移脚本当前实现，确认扩展点及日志格式。
+- 13:45 `shell:rg -n "class Chapter" backend/app/models/database.py` → 快速定位 Chapter 模型定义行号，为章节迁移做准备。
+- 13:46 `shell:sed -n '1,160p' backend/app/models/database.py` → 详细检查 Chapter 字段与关系，了解可复用数据。
+- 13:46 `apply_patch`（目标=`.claude/operations-log.md`）→ 记录上述检索命令，保持工具使用可追溯。
+- 13:47 `apply_patch`（目标=`backend/scripts/migrate_images_to_oss.py`）→ 新增 `migrate_chapter_images`、引入 Chapter 模型和图片正则，扩展迁移能力。
+- 13:48 `apply_patch`（目标=`backend/scripts/migrate_images_to_oss.py`）→ 调整章节迁移汇总日志，在 Dry Run/实上传状态下输出不同总结。
+- 13:49 `shell:sed -n '1,260p' backend/scripts/migrate_images_to_oss.py` → 校对脚本最新内容，确认导入、函数及日志配置正确。
+- 13:50 `apply_patch`（目标=`.claude/operations-log.md`）→ 补记迁移脚本与校对操作的工具留痕。
+- 13:51 `shell:nl -ba backend/scripts/migrate_images_to_oss.py | sed -n '1,260p'` → 生成行号视图，准备在报告中引用关键行。
+- 13:52 `apply_patch`（目标=`.claude/operations-log.md`）→ 追加行号命令的记录。
+- 13:53 `shell:source .venv/bin/activate && python backend/scripts/migrate_images_to_oss.py --dry-run` → 运行迁移脚本预览模式，验证章节日志输出；大量章节提示本地图片缺失，流程未报错。
+- 13:54 `apply_patch`（目标=`.claude/operations-log.md`）→ 记录 Dry Run 命令及其结果。
+- 13:55 `shell:ls docs` → 检查 `docs/` 目录是否存在，发现仓库暂未创建该目录。
+- 13:55 `apply_patch`（目标=`.claude/operations-log.md`）→ 同步 `ls docs` 结果。
+- 13:56 `shell:git status -sb` → 查看工作区状态，确认脚本与日志文件的改动。
+- 13:56 `apply_patch`（目标=`.claude/operations-log.md`）→ 记录 `git status` 信息。

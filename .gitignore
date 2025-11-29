@@ -36,6 +36,8 @@ backend/data/images/
 backend/data/covers/
 backend/data/books/
 backend/data/*.db
+# 管理员备份文件
+backend/data/backups/
 
 # 日志
 *.log

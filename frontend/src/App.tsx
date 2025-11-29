@@ -13,6 +13,7 @@ import NotFoundPage from './components/NotFoundPage';
 import LoginPage from './components/LoginPage';
 import AuthCallback from './components/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminPage from './pages/AdminPage';
 import LearningTheoryPage from './components/LearningTheoryPage';
 import VocabTestPage from './components/VocabTestPage';
 import { useAuthStore } from './stores/useAuthStore';
@@ -72,6 +73,7 @@ function App() {
 
         {/* 需要认证的路由 - 只有用户数据相关的页面 */}
         <Route path="/vocab" element={<ProtectedRoute><VocabPage /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
         <Route path="/upload" element={<UploadPage />} />
 
         {/* 其他路由 */}

@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { booksAPI } from '../services/api';
 import { useAuthStore } from '../stores/useAuthStore';
+
+const extractTitleFromFileName = (fileName: string) => {
+  return fileName
+    .replace(/\.[^.]+$/, '') // 去掉扩展名
+    .replace(/[_-]+/g, ' ') // 处理常见分隔符
+    .trim();
+};
 
 export default function UploadPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const duplicateCheckIdRef = useRef(0);
 
   // 检查登录状态
   useEffect(() => {
@@ -26,6 +34,10 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [duplicateBookTitle, setDuplicateBookTitle] = useState('');
+  const [duplicateCheckMessage, setDuplicateCheckMessage] = useState<string | null>(null);
   const [availableSeries] = useState<string[]>([
     'Magic Tree House',
     'Oxford Reading Tree',
@@ -63,6 +75,7 @@ export default function UploadPage() {
   const handleFile = (selectedFile: File) => {
     setError(null);
     setSuccess(false);
+    setDuplicateCheckMessage(null);
 
     if (!selectedFile.name.toLowerCase().endsWith('.epub')) {
       setError('只支持 EPUB 格式的文件');
@@ -70,6 +83,42 @@ export default function UploadPage() {
     }
 
     setFile(selectedFile);
+    void runDuplicateCheck(selectedFile);
+  };
+
+  // 依据文件名调用后端进行重复检测，确保上传前先排重
+  const runDuplicateCheck = async (selectedFile: File) => {
+    const title = extractTitleFromFileName(selectedFile.name);
+    if (!title) {
+      setDuplicateCheckMessage('无法从文件名中识别书名，请确认命名后再试。');
+      return;
+    }
+
+    const currentCheckId = ++duplicateCheckIdRef.current;
+    setCheckingDuplicate(true);
+    try {
+      const { data } = await booksAPI.checkDuplicate(title);
+      if (currentCheckId !== duplicateCheckIdRef.current) {
+        return;
+      }
+      if (data.exists) {
+        setDuplicateBookTitle(data.book?.title || title);
+        setDuplicateDialogOpen(true);
+        setFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    } catch (err) {
+      console.error('Duplicate check failed:', err);
+      if (currentCheckId === duplicateCheckIdRef.current) {
+        setDuplicateCheckMessage('重复检测失败，可继续上传或稍后再试。');
+      }
+    } finally {
+      if (currentCheckId === duplicateCheckIdRef.current) {
+        setCheckingDuplicate(false);
+      }
+    }
   };
 
   const handleUpload = async () => {
@@ -87,19 +136,6 @@ export default function UploadPage() {
     setError(null);
 
     try {
-      // 验证书籍是否已存在
-      const bookTitle = file.name.replace('.epub', '').trim();
-      const booksResponse = await booksAPI.getBooks();
-      const existingBook = booksResponse.data.find(
-        book => book.title.toLowerCase() === bookTitle.toLowerCase()
-      );
-
-      if (existingBook) {
-        setError('当前书籍已存在资源库，可通过查找搜寻');
-        setUploading(false);
-        return;
-      }
-
       const finalSeries = customSeries || series;
       const options: { series?: string; lexile: string; category?: 'fiction' | 'non-fiction' } = {
         lexile
@@ -177,6 +213,19 @@ export default function UploadPage() {
             className="hidden"
           />
         </div>
+
+        {checkingDuplicate && (
+          <div className="mt-4 flex items-center text-sm text-teal-600">
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            正在检查是否存在重复书籍，请稍候...
+          </div>
+        )}
+
+        {duplicateCheckMessage && (
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            {duplicateCheckMessage}
+          </div>
+        )}
 
         {/* 已选择的文件 */}
         {file && (
@@ -280,15 +329,44 @@ export default function UploadPage() {
         <button
           onClick={handleUpload}
           disabled={!file || uploading || success}
-          className={`mt-6 w-full py-3 rounded-lg font-medium transition-all ${
-            !file || uploading || success
+        className={`mt-6 w-full py-3 rounded-lg font-medium transition-all ${
+            !file || uploading || success || checkingDuplicate
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-teal-700 text-white hover:bg-teal-800 shadow-lg hover:shadow-xl'
           }`}
         >
-          {uploading ? '上传中...' : success ? '上传成功' : '开始上传'}
+          {uploading ? '上传中...' : checkingDuplicate ? '正在检查...' : success ? '上传成功' : '开始上传'}
         </button>
       </div>
+
+      {/* 重复提示弹窗 */}
+      {duplicateDialogOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">书籍已存在</h3>
+            <p className="text-gray-600 mb-4">
+              当前书籍《{duplicateBookTitle}》已在资源库，可前往全部书籍页面搜索阅读。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDuplicateDialogOpen(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                确定
+              </button>
+              <button
+                onClick={() => {
+                  setDuplicateDialogOpen(false);
+                  navigate('/shelf');
+                }}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 transition-colors"
+              >
+                查看书籍
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

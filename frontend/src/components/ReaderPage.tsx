@@ -558,6 +558,12 @@ export default function ReaderPage() {
     };
   }, [isResizingWindow, resizeDirection]);
 
+  const buildChapterUrl = (chapterNumber: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('chapter', String(chapterNumber));
+    return `/reader?${params.toString()}`;
+  };
+
   // 章节导航
   const goToPreviousChapter = () => {
     if (currentChapterIndex > 0) {
@@ -565,7 +571,7 @@ export default function ReaderPage() {
       const newChapterNumber = chapters[newIndex].chapter_number;
       setCurrentChapterIndex(newIndex);
       setSelectedWord(null);
-      navigate(`/reader?chapter=${newChapterNumber}`, { replace: true });
+      navigate(buildChapterUrl(newChapterNumber), { replace: true });
     }
   };
 
@@ -575,7 +581,7 @@ export default function ReaderPage() {
       const newChapterNumber = chapters[newIndex].chapter_number;
       setCurrentChapterIndex(newIndex);
       setSelectedWord(null);
-      navigate(`/reader?chapter=${newChapterNumber}`, { replace: true });
+      navigate(buildChapterUrl(newChapterNumber), { replace: true });
     }
   };
 
@@ -820,7 +826,7 @@ export default function ReaderPage() {
                       setCurrentChapterIndex(index);
                       setShowToc(false);
                       window.scrollTo(0, 0);
-                      navigate(`/reader?chapter=${chapter.chapter_number}`, { replace: true });
+                      navigate(buildChapterUrl(chapter.chapter_number), { replace: true });
                     }}
                     className={`w-full text-left p-3 rounded-lg transition-colors ${
                       index === currentChapterIndex

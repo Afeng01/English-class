@@ -96,3 +96,33 @@ export const LEVELS = [
 ] as const;
 
 export type Level = typeof LEVELS[number];
+
+// 管理员备份/删除 API 类型
+export interface AdminBackupItem {
+  book_id: string;
+  backup_path: string;
+  backup_size: number;
+}
+
+export interface AdminBackupFailure {
+  book_id: string;
+  reason: string;
+}
+
+export interface AdminBackupResponse {
+  success: boolean;
+  backups: AdminBackupItem[];
+  failed: AdminBackupFailure[];
+}
+
+export interface AdminDeleteFailure {
+  book_id: string;
+  reason: string;
+}
+
+export interface AdminDeleteResponse {
+  success: boolean;
+  deleted: string[];
+  failed: AdminDeleteFailure[];
+  backups?: AdminBackupItem[];
+}

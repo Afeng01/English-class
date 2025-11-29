@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Book, Brain, User, Sun, Moon, LogOut } from 'lucide-react';
+import { Book, Brain, User, Sun, Moon, LogOut, AlertTriangle } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -91,6 +91,19 @@ export default function Navigation({ isLoggedIn, theme, onToggleTheme }: Navigat
         >
           <Brain className="w-4 h-4" /> 词库
         </Link>
+
+        {import.meta.env.VITE_ADMIN_MODE === 'true' && (
+          <Link
+            to="/admin"
+            className={`flex items-center gap-1 rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
+              currentPath === '/admin' ? 'bg-red-600 text-white' : 'text-red-600 hover:bg-red-50'
+            }`}
+            title="管理员操作，请谨慎"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            管理员
+          </Link>
+        )}
 
         {/* 用户菜单 */}
         {isLoggedIn && user ? (

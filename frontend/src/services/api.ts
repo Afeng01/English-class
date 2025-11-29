@@ -1,5 +1,13 @@
 import axios from 'axios';
-import type { Book, BookDetail, Chapter, Vocabulary, DictionaryResult } from '../types';
+import type {
+  Book,
+  BookDetail,
+  Chapter,
+  Vocabulary,
+  DictionaryResult,
+  AdminBackupResponse,
+  AdminDeleteResponse,
+} from '../types';
 
 // API基础URL配置
 // 生产环境使用环境变量 VITE_API_BASE_URL，开发环境使用代理 '/api'
@@ -23,6 +31,16 @@ interface UploadResponse {
     word_count: number;
     chapter_count: number;
   };
+}
+
+interface DuplicateCheckResponse {
+  exists: boolean;
+  book?: {
+    id: string;
+    title: string;
+    author?: string;
+    cover?: string;
+  } | null;
 }
 
 // 书籍相关 API
@@ -74,6 +92,10 @@ export const booksAPI = {
   // 删除书籍
   deleteBook: (bookId: string) =>
     api.delete(`/books/${bookId}`),
+
+  // 检查书籍是否重复
+  checkDuplicate: (title: string, author?: string) =>
+    api.post<DuplicateCheckResponse>('/books/check-duplicate', { title, author }),
 };
 
 // 词典相关 API
@@ -81,6 +103,23 @@ export const dictionaryAPI = {
   // 查询单词（后端返回中英文全部结果）
   lookup: (word: string) =>
     api.get<DictionaryResult>(`/dictionary/${word}`),
+};
+
+// 管理员相关 API
+export const adminAPI = {
+  // 获取全部书籍
+  getAllBooks: () =>
+    api.get<Book[]>('/admin/books'),
+
+  // 备份书籍
+  backupBooks: (bookIds: string[]) =>
+    api.post<AdminBackupResponse>('/admin/backup', { book_ids: bookIds }),
+
+  // 批量删除书籍
+  deleteBooks: (bookIds: string[], backupBeforeDelete = false) =>
+    api.delete<AdminDeleteResponse>('/admin/books', {
+      data: { book_ids: bookIds, backup_before_delete: backupBeforeDelete },
+    }),
 };
 
 export default api;
