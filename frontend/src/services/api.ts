@@ -17,6 +17,9 @@ interface UploadResponse {
     title: string;
     author: string;
     level: string;
+    lexile?: string;
+    series?: string;
+    category?: string;
     word_count: number;
     chapter_count: number;
   };

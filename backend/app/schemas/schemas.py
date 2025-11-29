@@ -7,6 +7,9 @@ class BookBase(BaseModel):
     title: str
     author: Optional[str] = "Unknown"
     level: Optional[str] = None
+    lexile: Optional[str] = None
+    series: Optional[str] = None
+    category: Optional[str] = None
     description: Optional[str] = None
 
 

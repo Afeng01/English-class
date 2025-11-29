@@ -124,6 +124,7 @@ interface BookCardProps {
 
 function BookCard({ book, onView, onRead, onRemove }: BookCardProps) {
   const [showActions, setShowActions] = useState(false);
+  const difficultyTag = book.lexile || '***L'; // 蓝思值缺失时统一显示占位符
 
   return (
     <div
@@ -171,11 +172,12 @@ function BookCard({ book, onView, onRead, onRemove }: BookCardProps) {
           </div>
         )}
 
-        {book.level && (
-          <div className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-            {book.level}
+        {/* 蓝思值彩条 */}
+        <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
+          <div className="absolute top-3 right-[-20px] w-24 bg-blue-600 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
+            {difficultyTag}
           </div>
-        )}
+        </div>
       </div>
 
       <h3 className="text-sm font-bold text-gray-800 group-hover:text-teal-700 line-clamp-1">
@@ -183,11 +185,10 @@ function BookCard({ book, onView, onRead, onRemove }: BookCardProps) {
       </h3>
       <p className="text-xs text-gray-500 mb-1">{book.author || '未知作者'}</p>
       <div className="flex gap-1 flex-wrap">
-        {book.lexile && (
-          <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
-            {book.lexile}
-          </span>
-        )}
+        {/* 列表标签中同步展示蓝思值 */}
+        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+          {difficultyTag}
+        </span>
         {book.word_count && (
           <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
             {(book.word_count / 1000).toFixed(1)}k词

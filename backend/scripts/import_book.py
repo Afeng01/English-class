@@ -9,11 +9,14 @@ import sys
 import uuid
 import shutil
 import logging
+import zipfile
 from collections import Counter
+from typing import Dict, Optional, Set, Tuple
 
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
+from xml.etree import ElementTree as ET
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -225,6 +228,126 @@ def is_substantial_chapter(text: str, min_words: int = 100) -> bool:
     return True
 
 
+def normalize_epub_path(path: str) -> str:
+    """归一化EPUB内部路径"""
+    return path.replace('\\', '/')
+
+
+def resolve_opf_path(opf_dir: Optional[str], href: str) -> str:
+    """根据OPF目录解析相对路径"""
+    normalized = normalize_epub_path(href)
+    if not opf_dir:
+        return normalized.lstrip('./')
+    combined = normalize_epub_path(os.path.join(opf_dir, normalized))
+    return combined.lstrip('./')
+
+
+def load_opf_data(epub_path: str) -> tuple[Optional[ET.Element], Optional[str], list[ET.Element]]:
+    """解析EPUB的OPF文件，返回root、目录和manifest条目"""
+    try:
+        with zipfile.ZipFile(epub_path) as zf:
+            container_xml = zf.read('META-INF/container.xml')
+            container_root = ET.fromstring(container_xml)
+            rootfile_el = container_root.find('.//{*}rootfile')
+            if rootfile_el is None:
+                logger.warning("未找到rootfile，无法解析OPF")
+                return None, None, []
+            opf_path = rootfile_el.get('full-path')
+            opf_data = zf.read(opf_path)
+            opf_root = ET.fromstring(opf_data)
+            manifest_items = opf_root.findall('.//{*}manifest/{*}item')
+            opf_dir = os.path.dirname(opf_path)
+            return opf_root, opf_dir, manifest_items
+    except Exception as e:
+        logger.warning(f"解析OPF失败: {e}")
+        return None, None, []
+
+
+def build_manifest_map(manifest_items: list[ET.Element]) -> Dict[str, str]:
+    """构建manifest中id到href的映射"""
+    manifest_map: Dict[str, str] = {}
+    for item in manifest_items:
+        item_id = item.get('id')
+        href = item.get('href')
+        if item_id and href:
+            manifest_map[item_id] = href
+    return manifest_map
+
+
+def find_manifest_cover_href(manifest_items: list[ET.Element]) -> Optional[str]:
+    """在manifest中查找properties包含cover-image的元素"""
+    for item in manifest_items:
+        props = (item.get('properties') or '').lower()
+        if 'cover-image' in props:
+            return item.get('href')
+    return None
+
+
+def find_guide_cover_hrefs(opf_root: Optional[ET.Element]) -> list[str]:
+    """解析guide区域中的cover引用"""
+    if opf_root is None:
+        return []
+    hrefs = []
+    for ref in opf_root.findall('.//{*}reference'):
+        if (ref.get('type') or '').lower() == 'cover':
+            href = ref.get('href')
+            if href:
+                hrefs.append(href)
+    return hrefs
+
+
+def extract_guide_image_references(epub_path: str, opf_dir: Optional[str], guide_hrefs: list[str]) -> tuple[Set[str], Set[str]]:
+    """从guide引用的文档中提取图片路径与文件名"""
+    normalized_paths: Set[str] = set()
+    basenames: Set[str] = set()
+    if not guide_hrefs:
+        return normalized_paths, basenames
+
+    try:
+        with zipfile.ZipFile(epub_path) as zf:
+            for href in guide_hrefs:
+                resolved_doc = resolve_opf_path(opf_dir, href)
+                if resolved_doc not in zf.namelist():
+                    continue
+                doc_data = zf.read(resolved_doc)
+                soup = BeautifulSoup(doc_data, 'html.parser')
+                doc_dir = os.path.dirname(href)
+                for img in soup.find_all('img'):
+                    src = img.get('src')
+                    if not src:
+                        continue
+                    img_path = os.path.normpath(os.path.join(doc_dir, src))
+                    normalized = resolve_opf_path(opf_dir, img_path)
+                    normalized_paths.add(normalize_epub_path(normalized))
+                    basenames.add(os.path.basename(normalized).lower())
+    except Exception as e:
+        logger.warning(f"解析guide封面引用失败: {e}")
+
+    return normalized_paths, basenames
+
+
+def is_cover_filename(filename: str) -> bool:
+    """依据常见命名判断是否可能是封面"""
+    name_lower = filename.lower()
+    cover_patterns = [
+        'cover.jpg', 'cover.jpeg', 'cover.png', 'cover.gif',
+        'cover-image', 'coverimage', '/cover.', '_cover.', '-cover.',
+    ]
+    return any(pattern in name_lower for pattern in cover_patterns)
+
+
+def matches_href(item_name: str, target_href: str, opf_dir: Optional[str]) -> bool:
+    """判断图片路径是否匹配manifest中的href"""
+    if not target_href:
+        return False
+    normalized_item = normalize_epub_path(item_name)
+    normalized_target = normalize_epub_path(target_href)
+    resolved_target = resolve_opf_path(opf_dir, normalized_target)
+    return (
+        normalized_item == normalized_target
+        or normalized_item == resolved_target
+        or normalized_item.endswith(normalized_target)
+    )
 def extract_real_chapter_number(text: str) -> int:
     """从文本中提取真正的章节编号"""
     # 匹配 "Chapter X" 或 "第X章" 格式
@@ -239,10 +362,19 @@ def extract_real_chapter_number(text: str) -> int:
     return 0
 
 
-def import_epub(epub_path: str, level: str = None) -> str:
+def import_epub(epub_path: str, level: str = None, lexile: str = None, series: str = None, category: str = None) -> str:
     """
     导入 EPUB 文件到数据库
-    返回书籍 ID
+
+    Args:
+        epub_path: EPUB文件路径
+        level: 难度等级（保留以兼容旧代码）
+        lexile: 蓝思值（如"530L"）
+        series: 系列名（如"Magic Tree House"）
+        category: 分类（'fiction'或'non-fiction'）
+
+    Returns:
+        书籍ID
     """
     if not os.path.exists(epub_path):
         raise FileNotFoundError(f"EPUB file not found: {epub_path}")
@@ -282,6 +414,15 @@ def import_epub(epub_path: str, level: str = None) -> str:
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     images_dir = os.path.join(backend_dir, "data", "images", book_id)
 
+    # 解析OPF以辅助封面提取
+    opf_root, opf_dir, manifest_items = load_opf_data(epub_path)
+    manifest_map = build_manifest_map(manifest_items)
+    manifest_cover_href = find_manifest_cover_href(manifest_items)
+    guide_cover_hrefs = find_guide_cover_hrefs(opf_root)
+    guide_image_paths, guide_image_basenames = extract_guide_image_references(
+        epub_path, opf_dir, guide_cover_hrefs
+    )
+
     # 查找封面图片ID（从metadata中）
     cover_image_id = None
     for meta in book.get_metadata('OPF', 'cover'):
@@ -293,12 +434,17 @@ def import_epub(epub_path: str, level: str = None) -> str:
     # 提取并保存所有图片，建立映射关系
     image_map = {}  # 原始路径 -> 新URL
     cover_path = None
-    cover_candidates = []  # 封面候选列表
+    cover_candidates: list[tuple[int, str, str, str]] = []  # (优先级, url, 文件名, 描述)
+
+    def add_cover_candidate(priority: int, url: str, name: str, reason: str):
+        cover_candidates.append((priority, url, name, reason))
+        logger.info(f"📌 找到封面候选（{reason}）: {name}")
 
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_IMAGE:
             # 获取图片文件名
             item_name = item.get_name()
+            normalized_name = normalize_epub_path(item_name)
             file_name = os.path.basename(item_name)
 
             # 生成唯一文件名避免冲突
@@ -337,38 +483,53 @@ def import_epub(epub_path: str, level: str = None) -> str:
                 image_map['./' + item_name] = new_url
 
             # 检查是否为封面图片
-            is_cover = False
+            if cover_path:
+                continue
 
             # 方法1：检查是否匹配metadata中的cover ID
             if cover_image_id:
-                # cover_image_id可能是item的id或文件名
-                if (item.get_id() == cover_image_id or
+                metadata_match = (
+                    item.get_id() == cover_image_id or
                     file_name == cover_image_id or
-                    item_name == cover_image_id or
-                    item_name.endswith(cover_image_id)):
+                    normalized_name == normalize_epub_path(cover_image_id) or
+                    normalized_name.endswith(normalize_epub_path(cover_image_id))
+                )
+                if not metadata_match and cover_image_id in manifest_map:
+                    metadata_match = matches_href(normalized_name, manifest_map[cover_image_id], opf_dir)
+                if metadata_match:
                     cover_path = new_url
-                    is_cover = True
-                    logger.info(f"✅ 找到封面图片（通过metadata）: {file_name}")
+                    logger.info(f"✅ 找到封面图片（metadata）: {file_name}")
+                    continue
 
-            # 方法2：检查文件名是否包含"cover"关键词
-            if not is_cover:
-                file_lower = file_name.lower()
-                item_lower = item_name.lower()
-                if ('cover' in file_lower or 'cover' in item_lower or
-                    'cov' in file_lower):  # 有些命名为cov.jpg
-                    cover_candidates.append((new_url, file_name, 1))  # 优先级1
-                    logger.info(f"📌 找到封面候选（文件名包含cover）: {file_name}")
-                # 检查是否在images根目录且文件名简单（如cover.jpg, image001.jpg）
-                elif '/' not in item_name or item_name.count('/') <= 1:
-                    # 根目录的图片更可能是封面
-                    cover_candidates.append((new_url, file_name, 2))  # 优先级2
+            # 方法2：manifest属性properties="cover-image"
+            if manifest_cover_href and matches_href(normalized_name, manifest_cover_href, opf_dir):
+                cover_path = new_url
+                logger.info(f"✅ 找到封面图片（manifest cover-image）: {file_name}")
+                continue
+
+            # 方法3：guide区域指向的封面
+            if guide_image_paths:
+                if (normalized_name in guide_image_paths or
+                        file_name.lower() in guide_image_basenames):
+                    cover_path = new_url
+                    logger.info(f"✅ 找到封面图片（guide引用）: {file_name}")
+                    continue
+
+            # 方法4：常见文件名/路径模式
+            if is_cover_filename(file_name):
+                add_cover_candidate(1, new_url, file_name, '文件名匹配')
+                continue
+
+            # 方法5：单层目录的图片作为次级候选
+            if normalized_name.count('/') <= 1:
+                add_cover_candidate(2, new_url, file_name, '目录浅层图片')
 
     # 如果还没有找到封面，从候选列表中选择优先级最高的
     if not cover_path and cover_candidates:
-        # 按优先级排序（优先级数字越小越优先）
-        cover_candidates.sort(key=lambda x: x[2])
-        cover_path = cover_candidates[0][0]
-        logger.info(f"✅ 选择封面（从候选中）: {cover_candidates[0][1]}")
+        cover_candidates.sort(key=lambda x: x[0])
+        priority, url, name, reason = cover_candidates[0]
+        cover_path = url
+        logger.info(f"✅ 选择封面（候选: {reason}）: {name}")
 
     # 如果仍然没有封面，使用第一张图片（fallback）
     if not cover_path and image_map:
@@ -500,6 +661,9 @@ def import_epub(epub_path: str, level: str = None) -> str:
             author=author,
             cover=cover_path,  # 设置封面
             level=level,
+            lexile=lexile,  # 蓝思值
+            series=series,  # 系列名
+            category=category,  # 分类
             word_count=total_words,
             description=description,
             epub_path=epub_path
@@ -535,6 +699,9 @@ def import_epub(epub_path: str, level: str = None) -> str:
                     'author': author,
                     'cover': cover_path,
                     'level': level,
+                    'lexile': lexile,  # 蓝思值
+                    'series': series,  # 系列名
+                    'category': category,  # 分类
                     'word_count': total_words,
                     'description': description,
                     'epub_path': epub_path,

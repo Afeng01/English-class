@@ -6,6 +6,10 @@ import { useAuthStore } from '../stores/useAuthStore';
 import type { Book } from '../types';
 
 type LexileRange = 'all' | '0-200' | '200-400' | '400-600' | '600-800' | '800-1000' | '1000+';
+const SERIES_FILTERS = [
+  { label: '全部', value: 'all' },
+  { label: 'Magic Tree House', value: 'magic' },
+];
 
 export default function ShelfPage() {
   const navigate = useNavigate();
@@ -19,7 +23,7 @@ export default function ShelfPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'fiction' | 'non-fiction'>('all');
   const [selectedLexileRanges, setSelectedLexileRanges] = useState<Set<LexileRange>>(new Set(['all']));
-  const [selectedSeries, setSelectedSeries] = useState<'all' | 'magic-tree'>('all');
+  const [selectedSeries, setSelectedSeries] = useState<string>('all');
 
   useEffect(() => {
     loadBooks();
@@ -64,6 +68,17 @@ export default function ShelfPage() {
     }
   };
 
+  const parseLexileValue = (value?: string | null): number | null => {
+    if (!value) return null;
+    const match = value.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+
+  const normalizeSeriesText = (value?: string | null): string => {
+    if (!value) return '';
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  };
+
   // 筛选书籍
   const getFilteredBooks = () => {
     return books.filter(book => {
@@ -82,9 +97,8 @@ export default function ShelfPage() {
 
       // 难度筛选（基于蓝思值）
       if (!selectedLexileRanges.has('all')) {
-        if (!book.lexile) return false;
-
-        const lexileValue = parseInt(book.lexile.replace(/[^\d]/g, ''));
+        const lexileValue = parseLexileValue(book.lexile);
+        if (lexileValue === null) return false;
         let matchesRange = false;
 
         for (const range of selectedLexileRanges) {
@@ -115,8 +129,10 @@ export default function ShelfPage() {
 
       // 系列筛选
       if (selectedSeries !== 'all') {
-        if (selectedSeries === 'magic-tree') {
-          if (!book.series || !book.series.toLowerCase().includes('magic tree')) return false;
+        const normalizedTarget = normalizeSeriesText(selectedSeries);
+        const normalizedSeries = normalizeSeriesText(book.series);
+        if (!normalizedTarget || !normalizedSeries.includes(normalizedTarget)) {
+          return false;
         }
       }
 
@@ -301,22 +317,17 @@ export default function ShelfPage() {
             <div className="w-full h-px bg-gray-100 my-4"></div>
             <h3 className="font-bold text-gray-700 mb-4">系列</h3>
             <ul className="space-y-2 text-sm text-gray-600">
-              <li
-                onClick={() => setSelectedSeries('all')}
-                className={`cursor-pointer hover:text-teal-700 ${
-                  selectedSeries === 'all' ? 'font-medium text-teal-700' : ''
-                }`}
-              >
-                全部
-              </li>
-              <li
-                onClick={() => setSelectedSeries('magic-tree')}
-                className={`cursor-pointer hover:text-teal-700 ${
-                  selectedSeries === 'magic-tree' ? 'font-medium text-teal-700' : ''
-                }`}
-              >
-                Magic Tree House
-              </li>
+              {SERIES_FILTERS.map(filter => (
+                <li
+                  key={filter.value}
+                  onClick={() => setSelectedSeries(filter.value)}
+                  className={`cursor-pointer hover:text-teal-700 ${
+                    selectedSeries === filter.value ? 'font-medium text-teal-700' : ''
+                  }`}
+                >
+                  {filter.label}
+                </li>
+              ))}
             </ul>
           </div>
         </aside>
@@ -358,48 +369,52 @@ export default function ShelfPage() {
               </div>
             )}
 
-            {!loading && !error && filteredBooks.map((book) => (
-              <div key={book.id} className="group cursor-pointer" onClick={() => handleBookClick(book)}>
-                <div className="aspect-[2/3] bg-white border border-gray-200 rounded-lg shadow-sm mb-3 flex items-center justify-center relative overflow-hidden group-hover:shadow-md transition-all">
-                  {book.cover ? (
-                    <img
-                      src={book.cover}
-                      alt={book.title}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-                  <BookOpen className={`w-12 h-12 text-gray-200 group-hover:text-teal-200 transition-colors ${book.cover ? 'hidden' : ''}`} />
-                  {book.lexile && (
+            {!loading && !error && filteredBooks.map((book) => {
+              const lexileTag = book.lexile || '***L'; // 蓝思值缺失时统一显示占位符
+              return (
+                <div key={book.id} className="group cursor-pointer" onClick={() => handleBookClick(book)}>
+                  <div className="aspect-[2/3] bg-white border border-gray-200 rounded-lg shadow-sm mb-3 flex items-center justify-center relative overflow-hidden group-hover:shadow-md transition-all">
+                    {book.cover ? (
+                      <>
+                        <img
+                          src={book.cover}
+                          alt={book.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const imgElement = e.target as HTMLImageElement;
+                            imgElement.style.display = 'none';
+                            const fallbackIcon = imgElement.parentElement?.querySelector('.fallback-icon');
+                            if (fallbackIcon) {
+                              fallbackIcon.classList.remove('hidden');
+                            }
+                          }}
+                        />
+                        <BookOpen className="fallback-icon hidden w-12 h-12 text-gray-200 group-hover:text-teal-200 transition-colors absolute" />
+                      </>
+                    ) : (
+                      <BookOpen className="w-12 h-12 text-gray-200 group-hover:text-teal-200 transition-colors" />
+                    )}
+                    {/* 蓝思值彩条 */}
                     <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
-                      <div className="absolute top-3 right-[-20px] w-24 bg-blue-500 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
-                        {book.lexile}
+                      <div className="absolute top-3 right-[-20px] w-24 bg-blue-600 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
+                        {lexileTag}
                       </div>
                     </div>
-                  )}
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-800 group-hover:text-teal-700 line-clamp-1">
+                    {book.title}
+                  </h3>
+                  <p className="text-xs text-gray-500">{book.author || '未知作者'}</p>
+                  <div className="mt-2 flex gap-1 flex-wrap">
+                    {book.word_count && (
+                      <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded">
+                        {(book.word_count / 1000).toFixed(1)}k词
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <h3 className="text-sm font-bold text-gray-800 group-hover:text-teal-700 line-clamp-1">
-                  {book.title}
-                </h3>
-                <p className="text-xs text-gray-500">{book.author || '未知作者'}</p>
-                <div className="mt-2 flex gap-1 flex-wrap">
-                  {book.level && (
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{book.level}</span>
-                  )}
-                  {book.lexile && (
-                    <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{book.lexile}</span>
-                  )}
-                  {book.word_count && (
-                    <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded">
-                      {(book.word_count / 1000).toFixed(1)}k词
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

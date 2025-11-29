@@ -26,7 +26,10 @@ class Book(Base):
     title = Column(String, nullable=False)
     author = Column(String, default="Unknown")
     cover = Column(String)  # 封面图片路径
-    level = Column(String)  # 难度等级：学前、一年级...
+    level = Column(String)  # 【已废弃】早期难度等级字段，仅为兼容旧数据保留
+    lexile = Column(String)  # 蓝思值：如"530L"、"BR200L"
+    series = Column(String)  # 系列名：如"Magic Tree House"
+    category = Column(String)  # 分类：fiction或non-fiction
     word_count = Column(Integer, default=0)
     description = Column(Text)
     epub_path = Column(String)  # EPUB 文件路径

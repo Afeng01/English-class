@@ -98,6 +98,8 @@ export default function BookDetailPage() {
   }
 
   const progress = getReadingProgress();
+  const difficultyTag = book.lexile || '***L'; // 蓝思值缺失时统一显示占位符
+  const difficultyValue = difficultyTag;
 
   const handleBack = () => {
     const from = searchParams.get('from');
@@ -152,11 +154,12 @@ export default function BookDetailPage() {
             ) : (
               <BookOpen className="w-20 h-20 text-teal-300" />
             )}
-            {book.level && (
-              <span className="absolute top-3 left-3 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded">
-                {book.level}
-              </span>
-            )}
+            {/* 蓝思值彩条 */}
+            <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
+              <div className="absolute top-3 right-[-20px] w-24 bg-blue-600 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
+                {difficultyTag}
+              </div>
+            </div>
           </div>
 
           {/* 右侧：信息 */}
@@ -179,8 +182,8 @@ export default function BookDetailPage() {
                 </div>
                 <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-xl border border-gray-100">
                   <TrendingUp className="w-7 h-7 text-teal-600 mb-2" />
-                  <span className="font-bold text-gray-800 text-xl leading-none">{book.level || '未知'}</span>
-                  <span className="text-xs text-gray-500 uppercase tracking-wide mt-1">难度</span>
+                  <span className="font-bold text-gray-800 text-xl leading-none">{difficultyValue}</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wide mt-1">蓝思值</span>
                 </div>
               </div>
 

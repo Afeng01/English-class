@@ -149,22 +149,32 @@ async def get_level_options():
 @router.post("/upload")
 async def upload_book(
     file: UploadFile = File(..., description="EPUB文件"),
-    level: str = Form(..., description="难度等级"),
+    level: str = Form(None, description="难度等级（可选，保留以兼容）"),
+    lexile: str = Form(None, description="蓝思值（如：530L、BR200L）"),
+    series: str = Form(None, description="系列名（如：Magic Tree House）"),
+    category: str = Form(None, description="分类（fiction或non-fiction）"),
     db: Session = Depends(get_db)
 ):
     """
     上传EPUB书籍（自动同步到Supabase和SQLite）
 
     - **file**: EPUB格式的电子书文件
-    - **level**: 难度等级（如：学前、一年级、初一等）
+    - **lexile**: 蓝思值（推荐填写）
+    - **series**: 系列名（可选）
+    - **category**: 分类 - fiction或non-fiction（可选）
+    - **level**: 难度等级（可选，保留以兼容旧版本）
     """
     # 验证文件类型
     if not file.filename.lower().endswith('.epub'):
         raise HTTPException(status_code=400, detail="只支持EPUB格式的文件")
 
-    # 验证难度等级
-    if level not in LEVEL_OPTIONS:
+    # 验证难度等级（如果提供）
+    if level and level not in LEVEL_OPTIONS:
         raise HTTPException(status_code=400, detail=f"无效的难度等级，可选值：{', '.join(LEVEL_OPTIONS)}")
+
+    # 验证分类（如果提供）
+    if category and category not in ['fiction', 'non-fiction']:
+        raise HTTPException(status_code=400, detail="分类必须是 'fiction' 或 'non-fiction'")
 
     # 保存上传的文件到临时目录
     temp_dir = tempfile.mkdtemp()
@@ -178,7 +188,13 @@ async def upload_book(
 
         # 导入书籍（import_book.py会自动同步到Supabase）
         from scripts.import_book import import_epub
-        book_id = import_epub(temp_path, level)
+        book_id = import_epub(
+            temp_path,
+            level=level or "未分级",  # 提供默认值
+            lexile=lexile,
+            series=series,
+            category=category
+        )
 
         # 优先从Supabase获取书籍信息
         book_info = None
@@ -191,9 +207,12 @@ async def upload_book(
                     book_info = {
                         "id": book_data['id'],
                         "title": book_data['title'],
-                        "author": book_data['author'],
-                        "level": book_data['level'],
-                        "word_count": book_data['word_count'],
+                        "author": book_data.get('author'),
+                        "level": book_data.get('level'),
+                        "lexile": book_data.get('lexile'),
+                        "series": book_data.get('series'),
+                        "category": book_data.get('category'),
+                        "word_count": book_data.get('word_count'),
                         "chapter_count": len(chapters)
                     }
                     logger.info(f"✅ 从Supabase获取上传书籍信息: {book_data['title']}")
@@ -208,6 +227,9 @@ async def upload_book(
                 "title": book.title,
                 "author": book.author,
                 "level": book.level,
+                "lexile": book.lexile,
+                "series": book.series,
+                "category": book.category,
                 "word_count": book.word_count,
                 "chapter_count": len(book.chapters)
             }

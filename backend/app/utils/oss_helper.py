@@ -1,10 +1,10 @@
 """
-阿里云OSS图片存储工具
-提供图片上传、删除等功能
+图片存储工具：优先使用云端（阿里云OSS或Supabase Storage），失败时退回本地
 """
+import io
 import os
 import shutil
-from typing import Optional
+from typing import List, Optional
 import logging
 
 try:
@@ -14,6 +14,7 @@ except ImportError:
     OSS_AVAILABLE = False
 
 from app.config import oss_config
+from app.utils.supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,36 +26,48 @@ class OSSHelper:
         """初始化OSS客户端"""
         self.enabled = False
         self.bucket = None
+        self.backend: str = "local"  # ali_oss / supabase / local
+        self.supabase_bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "book-images")
+        self.supabase_storage = None
 
-        if not oss_config.use_oss:
-            logger.info("OSS功能未启用，将使用本地存储")
-            return
+        # 优先尝试阿里云OSS
+        if oss_config.use_oss:
+            if not OSS_AVAILABLE:
+                logger.warning("❌ oss2库未安装，无法使用阿里云OSS。请执行: pip3 install oss2==2.18.4")
+                logger.warning("   如需指定Python版本，可执行: python3 -m pip install oss2==2.18.4")
+            elif not oss_config.is_configured():
+                logger.warning("❌ OSS配置不完整，请检查 .env 中的 OSS_ACCESS_KEY_ID/SECRET/ENDPOINT/BUCKET 配置")
+            else:
+                try:
+                    auth = oss2.Auth(
+                        oss_config.access_key_id,
+                        oss_config.access_key_secret
+                    )
+                    self.bucket = oss2.Bucket(
+                        auth,
+                        oss_config.endpoint,
+                        oss_config.bucket_name,
+                        connect_timeout=30
+                    )
+                    self.enabled = True
+                    self.backend = "ali_oss"
+                    logger.info(f"✅ 阿里云OSS初始化成功: bucket={oss_config.bucket_name}")
+                    return
+                except Exception as e:
+                    logger.error(f"❌ OSS初始化失败: {e}，将尝试Supabase或本地存储")
 
-        if not OSS_AVAILABLE:
-            logger.warning("oss2库未安装，无法使用OSS功能，将使用本地存储")
-            return
+        # 其次尝试Supabase Storage（无需额外配置）
+        if supabase_client.enabled and supabase_client.client:
+            try:
+                self.supabase_storage = supabase_client.client.storage
+                self.enabled = True
+                self.backend = "supabase"
+                logger.info(f"使用Supabase Storage作为图片存储，bucket={self.supabase_bucket}")
+                return
+            except Exception as e:
+                logger.error(f"Supabase Storage 初始化失败: {e}，将使用本地存储")
 
-        if not oss_config.is_configured():
-            logger.warning("OSS配置不完整，将使用本地存储")
-            return
-
-        try:
-            # 初始化OSS客户端
-            auth = oss2.Auth(
-                oss_config.access_key_id,
-                oss_config.access_key_secret
-            )
-            self.bucket = oss2.Bucket(
-                auth,
-                oss_config.endpoint,
-                oss_config.bucket_name,
-                connect_timeout=30  # 连接超时30秒
-            )
-            self.enabled = True
-            logger.info(f"OSS初始化成功: bucket={oss_config.bucket_name}")
-        except Exception as e:
-            logger.error(f"OSS初始化失败: {e}，将使用本地存储")
-            self.enabled = False
+        logger.info("未启用任何云端图片存储，将使用本地存储")
 
     def upload_image(self, image_data: bytes, object_name: str) -> str:
         """
@@ -73,26 +86,58 @@ class OSSHelper:
         if not self.enabled:
             raise RuntimeError("OSS未启用或初始化失败")
 
-        try:
-            # 上传到OSS
-            result = self.bucket.put_object(object_name, image_data)
+        if self.backend == "ali_oss":
+            try:
+                result = self.bucket.put_object(object_name, image_data)
+                if result.status != 200:
+                    raise Exception(f"OSS上传失败，状态码: {result.status}")
 
-            if result.status != 200:
-                raise Exception(f"OSS上传失败，状态码: {result.status}")
+                url = f"https://{oss_config.bucket_name}.{oss_config.endpoint.replace('http://', '').replace('https://', '')}/{object_name}"
+                logger.info(f"图片上传成功: {object_name}")
+                return url
 
-            # 生成访问URL（不使用CDN的情况下）
-            # 格式: https://bucket-name.endpoint/object-name
-            url = f"https://{oss_config.bucket_name}.{oss_config.endpoint.replace('http://', '').replace('https://', '')}/{object_name}"
+            except oss2.exceptions.OssError as e:
+                logger.error(f"OSS上传失败: {e}")
+                raise Exception(f"OSS上传失败: {e}")
+            except Exception as e:
+                logger.error(f"图片上传失败: {e}")
+                raise
 
-            logger.info(f"图片上传成功: {object_name}")
-            return url
+        if self.backend == "supabase":
+            try:
+                storage_bucket = self.supabase_storage.from_(self.supabase_bucket)
+                response = storage_bucket.upload(
+                    path=object_name,
+                    file=image_data,
+                    file_options={"content-type": "image/jpeg"}
+                )
 
-        except oss2.exceptions.OssError as e:
-            logger.error(f"OSS上传失败: {e}")
-            raise Exception(f"OSS上传失败: {e}")
-        except Exception as e:
-            logger.error(f"图片上传失败: {e}")
-            raise
+                # Supabase Python SDK返回dict或具有error属性的对象
+                error_obj = None
+                if isinstance(response, dict):
+                    error_obj = response.get("error")
+                elif hasattr(response, "error"):
+                    error_obj = getattr(response, "error")
+                if error_obj:
+                    raise Exception(getattr(error_obj, "message", str(error_obj)))
+
+                public_url_data = storage_bucket.get_public_url(object_name)
+                url = None
+                if isinstance(public_url_data, dict):
+                    url = public_url_data.get("publicUrl") or public_url_data.get("data", {}).get("publicUrl")
+                elif isinstance(public_url_data, str):
+                    url = public_url_data
+
+                if not url:
+                    raise Exception("无法获取Supabase公共URL，请确认Bucket为public")
+
+                logger.info(f"图片上传成功: {object_name}")
+                return url
+            except Exception as e:
+                logger.error(f"Supabase Storage 上传失败: {e}")
+                raise
+
+        raise RuntimeError("未找到可用的云存储后端")
 
     def delete_images(self, book_id: str) -> bool:
         """
@@ -105,37 +150,62 @@ class OSSHelper:
             是否成功删除
         """
         if not self.enabled:
-            logger.info("OSS未启用，跳过OSS删除操作")
+            logger.info("云存储未启用，跳过远程删除")
             return False
 
-        try:
-            # 列出该书籍的所有图片
-            prefix = f"{book_id}/"
-            objects_to_delete = []
+        if self.backend == "ali_oss":
+            try:
+                prefix = f"{book_id}/"
+                objects_to_delete = [obj.key for obj in oss2.ObjectIterator(self.bucket, prefix=prefix)]
 
-            for obj in oss2.ObjectIterator(self.bucket, prefix=prefix):
-                objects_to_delete.append(obj.key)
+                if not objects_to_delete:
+                    logger.info(f"书籍 {book_id} 没有OSS图片需要删除")
+                    return True
 
-            if not objects_to_delete:
-                logger.info(f"书籍 {book_id} 没有OSS图片需要删除")
-                return True
-
-            # 批量删除
-            result = self.bucket.batch_delete_objects(objects_to_delete)
-
-            if len(result.deleted_keys) == len(objects_to_delete):
-                logger.info(f"成功删除书籍 {book_id} 的 {len(objects_to_delete)} 张图片")
-                return True
-            else:
+                result = self.bucket.batch_delete_objects(objects_to_delete)
+                if len(result.deleted_keys) == len(objects_to_delete):
+                    logger.info(f"成功删除书籍 {book_id} 的 {len(objects_to_delete)} 张图片")
+                    return True
                 logger.warning(f"部分图片删除失败，成功: {len(result.deleted_keys)}, 总数: {len(objects_to_delete)}")
                 return False
+            except oss2.exceptions.OssError as e:
+                logger.error(f"OSS删除失败: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"删除图片失败: {e}")
+                return False
 
-        except oss2.exceptions.OssError as e:
-            logger.error(f"OSS删除失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"删除图片失败: {e}")
-            return False
+        if self.backend == "supabase":
+            try:
+                prefix = f"{book_id}"
+                storage_bucket = self.supabase_storage.from_(self.supabase_bucket)
+                response = storage_bucket.list(prefix)
+                file_list = []
+                if isinstance(response, dict):
+                    file_list = response.get("data") or []
+                elif isinstance(response, list):
+                    file_list = response
+
+                if not file_list:
+                    logger.info(f"Supabase Storage 中没有书籍 {book_id} 的图片")
+                    return True
+
+                paths_to_delete = [f"{prefix}/{file.get('name')}" for file in file_list if file.get('name')]
+                if not paths_to_delete:
+                    logger.info(f"Supabase Storage 找不到可删除的图片: {book_id}")
+                    return True
+
+                delete_response = storage_bucket.remove(paths_to_delete)
+                if isinstance(delete_response, dict) and delete_response.get("error"):
+                    logger.warning(f"Supabase 删除部分失败: {delete_response['error']}")
+                    return False
+
+                logger.info(f"已删除 Supabase Storage 中书籍 {book_id} 的 {len(paths_to_delete)} 张图片")
+                return True
+            except Exception as e:
+                logger.error(f"Supabase Storage 删除失败: {e}")
+                return False
+        return False
 
     def save_image_local(self, image_data: bytes, save_path: str) -> str:
         """

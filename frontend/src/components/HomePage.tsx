@@ -157,15 +157,31 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
                 {/* 左侧封面 */}
                 <div className="w-20 h-28 bg-blue-100 rounded-md flex items-center justify-center text-blue-400 flex-shrink-0 overflow-hidden relative">
                   {recentBook.cover ? (
-                    <img src={recentBook.cover} alt={recentBook.title} className="w-full h-full object-cover" />
+                    <>
+                      <img
+                        src={recentBook.cover}
+                        alt={recentBook.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const imgElement = e.target as HTMLImageElement;
+                          imgElement.style.display = 'none';
+                          const fallbackIcon = imgElement.parentElement?.querySelector('.fallback-icon');
+                          if (fallbackIcon) {
+                            fallbackIcon.classList.remove('hidden');
+                          }
+                        }}
+                      />
+                      <BookOpen className="fallback-icon hidden w-10 h-10 absolute" />
+                    </>
                   ) : (
                     <BookOpen className="w-10 h-10" />
                   )}
-                  {recentBook.level && (
-                    <span className="absolute top-0 left-0 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-br">
-                      {recentBook.level}
-                    </span>
-                  )}
+                  {/* 蓝思值彩条，缺失时显示默认值 */}
+                  <div className="absolute top-0 right-0 w-12 h-12 overflow-hidden">
+                    <div className="absolute top-2 right-[-14px] w-16 bg-blue-600 text-white text-[10px] font-bold py-0.5 text-center transform rotate-45 shadow-md">
+                      {recentBook.lexile || '***L'}
+                    </div>
+                  </div>
                 </div>
                 {/* 右侧信息 */}
                 <div className="flex flex-col justify-between w-full">
@@ -195,15 +211,31 @@ export default function HomePage({ isLoggedIn }: HomePageProps) {
                 {/* 左侧封面 */}
                 <div className="w-20 h-28 bg-amber-100 rounded-md flex items-center justify-center text-amber-400 flex-shrink-0 overflow-hidden relative">
                   {books[1].cover ? (
-                    <img src={books[1].cover} alt={books[1].title} className="w-full h-full object-cover" />
+                    <>
+                      <img
+                        src={books[1].cover}
+                        alt={books[1].title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const imgElement = e.target as HTMLImageElement;
+                          imgElement.style.display = 'none';
+                          const fallbackIcon = imgElement.parentElement?.querySelector('.fallback-icon');
+                          if (fallbackIcon) {
+                            fallbackIcon.classList.remove('hidden');
+                          }
+                        }}
+                      />
+                      <BookOpen className="fallback-icon hidden w-10 h-10 absolute" />
+                    </>
                   ) : (
                     <BookOpen className="w-10 h-10" />
                   )}
-                  {books[1].level && (
-                    <span className="absolute top-0 left-0 bg-amber-600 text-white text-xs px-1.5 py-0.5 rounded-br">
-                      {books[1].level}
-                    </span>
-                  )}
+                  {/* 蓝思值彩条，缺失时显示默认值 */}
+                  <div className="absolute top-0 right-0 w-12 h-12 overflow-hidden">
+                    <div className="absolute top-2 right-[-14px] w-16 bg-blue-600 text-white text-[10px] font-bold py-0.5 text-center transform rotate-45 shadow-md">
+                      {books[1].lexile || '***L'}
+                    </div>
+                  </div>
                 </div>
                 {/* 右侧信息 */}
                 <div className="flex flex-col justify-between w-full">
@@ -355,6 +387,7 @@ function BookCard({ book, color, onClick }: BookCardProps) {
   };
 
   const colors = colorClasses[color] || colorClasses.teal;
+  const lexileTag = book.lexile || '***L'; // 蓝思值缺失时统一显示占位符
 
   return (
     <div className="group cursor-pointer" onClick={onClick}>
@@ -362,17 +395,31 @@ function BookCard({ book, color, onClick }: BookCardProps) {
         className={`aspect-[2/3] ${colors.bg} border border-gray-200 rounded-lg shadow-sm mb-3 flex items-center justify-center relative overflow-hidden group-hover:shadow-md transition-all group-hover:-translate-y-1`}
       >
         {book.cover ? (
-          <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+          <>
+            <img
+              src={book.cover}
+              alt={book.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const imgElement = e.target as HTMLImageElement;
+                imgElement.style.display = 'none';
+                const fallbackIcon = imgElement.parentElement?.querySelector('.fallback-icon');
+                if (fallbackIcon) {
+                  fallbackIcon.classList.remove('hidden');
+                }
+              }}
+            />
+            <BookOpen className={`fallback-icon hidden w-12 h-12 ${colors.text} absolute`} />
+          </>
         ) : (
           <BookOpen className={`w-12 h-12 ${colors.text}`} />
         )}
-        {book.lexile && (
-          <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
-            <div className="absolute top-3 right-[-20px] w-24 bg-blue-500 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
-              {book.lexile}
-            </div>
+        {/* 蓝思值彩条 */}
+        <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
+          <div className="absolute top-3 right-[-20px] w-24 bg-blue-600 text-white text-[10px] font-bold py-1 text-center transform rotate-45 shadow-md">
+            {lexileTag}
           </div>
-        )}
+        </div>
       </div>
       <h3 className="text-sm font-bold text-gray-800 group-hover:text-teal-700 line-clamp-1">{book.title}</h3>
       <p className="text-xs text-gray-500">{book.author || '未知作者'}</p>

@@ -81,13 +81,25 @@ class SupabaseClient:
             return False
 
     def get_book(self, book_id: str) -> Optional[Dict[str, Any]]:
-        """获取书籍信息"""
+        """获取书籍信息（附带章节列表，供目录展示）"""
         if not self.enabled:
             return None
 
         try:
             result = self.client.table('books').select('*').eq('id', book_id).single().execute()
-            return result.data
+            book_data = result.data
+            if not book_data:
+                return None
+
+            # 同步查询章节并附带到返回结果，避免前端目录缺失
+            chapters_result = self.client.table('chapters')\
+                .select('*')\
+                .eq('book_id', book_id)\
+                .order('chapter_number')\
+                .execute()
+            book_data['chapters'] = chapters_result.data or []
+
+            return book_data
         except Exception as e:
             logger.error(f"获取书籍失败: {e}")
             return None

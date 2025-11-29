@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2025-11-28 20:22 Codex",
+  "bookDetailComponent": {
+    "location": "frontend/src/components/BookDetailPage.tsx:1-395",
+    "structure": "组件通过 useParams/useSearchParams 获取 ID，调用 booksAPI.getBook/getVocabulary 后渲染返回与阅读按钮、封面与统计卡片以及阅读进度等块（1-205 行）。",
+    "tocLogic": "同文件 210-394 行的 activeTab 决定内容；activeTab==='chapters' 时判断 book.chapters.length 并 map 生成章节卡片，点击后进入阅读器（247-281 行），其余标签页呈现高频词汇和简介。"
+  },
+  "tocIssue": {
+    "dataField": "目录来自 BookDetailResponse.chapters（backend/app/schemas/schemas.py:50-52），经 GET /books/{id} 提供给前端（frontend/src/services/api.ts:32-34）。",
+    "renderComponent": "frontend/src/components/BookDetailPage.tsx:247-281 直接遍历 book.chapters，统计卡片也依赖 book.chapters.length（169-183 行）。",
+    "possibleCause": "Supabase 分支中 backend/app/api/books.py:54-72 直接返回 supabase_client.get_book，而该方法（backend/app/utils/supabase_client.py:83-94）只查询 books 表并不附带 chapters，导致响应缺少章节数组，目录统计与渲染得到 undefined。需让详情接口合并章节或前端追加 /books/{id}/chapters 请求。"
+  },
+  "lexileField": {
+    "databaseField": "backend/app/models/database.py:25-36 定义 books.lexile (Column(String))",
+    "dataType": "字符串，注释示例"530L/BR200L"。",
+    "usageLocations": [
+      "backend/app/api/books.py:153-211 upload_book 接收 Form lexile 并传给导入脚本",
+      "frontend/src/services/api.ts:52-70 在上传 FormData 中附带 lexile",
+      "frontend/src/components/HomePage.tsx:58-90,338-425 用蓝思值筛选并在卡片右上角展示丝带",
+      "frontend/src/components/ShelfPage.tsx:342-404 在书籍卡片上渲染蓝思值丝带",
+      "frontend/src/components/MyShelfPage.tsx:185-196 在书架卡片标签里显示 lexile",
+      "frontend/src/components/UploadPage.tsx:75-218 将蓝思值设置为必填输入"
+    ]
+  },
+  "gradeLevelUsage": {
+    "frontend": [
+      "未检索到 grade_level；UI 通过 book.level 展示年级难度，例如 frontend/src/components/BookDetailPage.tsx:169-183 的"难度"卡片和 frontend/src/components/MyShelfPage.tsx:174-195 的 level 徽章。"
+    ],
+    "backend": [
+      "后端沿用 Book.level，详情与上传接口均基于该字段（backend/app/api/books.py:54-72,153-211）。"
+    ],
+    "database": "books 表只包含 level 列（backend/app/models/database.py:25-36），无 grade_level 字段。"
+  },
+  "bookCoverComponent": {
+    "location": "HomePage 末尾 BookCard（frontend/src/components/HomePage.tsx:371-425）与 MyShelfPage 内 BookCard（frontend/src/components/MyShelfPage.tsx:118-198）。",
+    "structure": "两者都用 aspect-[2/3] 容器包裹封面，提供 BookOpen 兜底图标和悬浮阴影；HomePage 版本按配色渲染 lexile 丝带（415-418 行），MyShelf 版本还叠加阅读/详情/删除按钮并以 span 展示 level、lexile、词数（174-195 行）。",
+    "availableTagComponent": "暂无独立 Tag/Badge 组件，都是在卡片内部用 span + Tailwind 手写（如 frontend/src/components/MyShelfPage.tsx:185-196）。"
+  },
+  "techStack": {
+    "uiLibrary": "React 18 + lucide-react 自研界面（frontend/package.json:14-20），未使用 Ant Design 或 MUI。",
+    "stateManagement": "Zustand 全局 store 管理书籍/词汇/阅读设置（frontend/src/stores/useAppStore.ts:1-136）。",
+    "styling": "Tailwind CSS（frontend/package.json:27-35, frontend/tailwind.config.js:1-18）驱动所有样式类。"
+  },
+  "observations": "1) Supabase 详情未附带 chapters，使 BookDetailPage 目录和统计都拿不到数据；2) 需求提到的 grade_level 字段在代码库中不存在，需要确认命名与迁移；3) 仓库缺少 *.test.tsx/*.spec.tsx 测试，建议补充至少烟雾测试。"
+}
