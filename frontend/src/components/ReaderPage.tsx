@@ -1,21 +1,72 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { List, Plus, Loader2, AlertCircle, X, Volume2, Check, Bookmark, Settings, Maximize2, Minimize2, Sun, Moon, ChevronLeft, Eye, EyeOff, PanelRightClose, PanelRightOpen, GripVertical } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { booksAPI, dictionaryAPI } from '../services/api';
-import { progressStorage, vocabularyStorage } from '../services/storage';
+import { progressStorage, vocabularyStorage, settingsStorage } from '../services/storage';
 import type { Chapter, DictionaryResult } from '../types';
 import Toast from './Toast';
 
+const TRANSLATION_CACHE_STORAGE_KEY = 'reader_translation_cache';
+const MAX_TRANSLATION_CACHE_SIZE = 100;
+const LAST_READING_STATE_KEY = 'reader_last_state';
+const READING_STATE_EXPIRE_DURATION = 24 * 60 * 60 * 1000; // 24小时
+const SCROLL_PERSIST_INTERVAL = 500;
+
+interface LastReadingState {
+  bookId: string;
+  chapterNumber: number;
+  scrollPosition: number;
+  source?: string | null;
+  timestamp: number;
+}
+
+const loadLastReadingState = (): LastReadingState | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LAST_READING_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastReadingState;
+    if (!parsed.bookId || Date.now() - parsed.timestamp > READING_STATE_EXPIRE_DURATION) {
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    console.warn('读取阅读状态失败:', error);
+    return null;
+  }
+};
+
+const persistLastReadingState = (state: LastReadingState) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LAST_READING_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('保存阅读状态失败:', error);
+  }
+};
+
 export default function ReaderPage() {
+  const getInitialViewport = () => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
+    height: typeof window !== 'undefined' ? window.innerHeight : 768,
+  });
+  const getInitialIsMedium = () => (typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const currentBook = useAppStore(state => state.currentBook);
   const addWord = useAppStore(state => state.addWord);
+  const setCurrentBookState = useAppStore(state => state.setCurrentBook);
   const { user } = useAuthStore();
   const contentRef = useRef<HTMLDivElement>(null);
   const isInitialLoad = useRef(true); // 标记是否首次加载
+  const translationCacheRef = useRef<Map<string, DictionaryResult>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastReadingStateRef = useRef<LastReadingState | null>(null);
+  const lastScrollPersistRef = useRef(0);
+  const restoredScrollForChapterRef = useRef<string | null>(null);
 
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
@@ -48,9 +99,18 @@ export default function ReaderPage() {
   });
 
   // 词典面板模式：fixed(固定), floating(悬浮), hidden(隐藏)
-  const [dictionaryMode, setDictionaryMode] = useState<'fixed' | 'floating' | 'hidden'>('fixed');
+  const [dictionaryMode, setDictionaryMode] = useState<'fixed' | 'floating' | 'hidden'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'hidden';
+    }
+    return 'fixed';
+  });
   const [floatingPosition, setFloatingPosition] = useState({ x: window.innerWidth - 400, y: 100 });
   const [floatingSize, setFloatingSize] = useState({ width: 380, height: 500 });
+  const [viewportSize, setViewportSize] = useState(getInitialViewport);
+  const [isMediumScreen, setIsMediumScreen] = useState(getInitialIsMedium);
+  const isMediumScreenRef = useRef(isMediumScreen);
+  const [initializingBook, setInitializingBook] = useState(false);
 
   // 侧边栏宽度和拖拽状态
   const [sidebarWidth, setSidebarWidth] = useState(288); // 默认w-72=288px
@@ -80,6 +140,13 @@ export default function ReaderPage() {
     const saved = localStorage.getItem('showChinese');
     return saved !== null ? saved === 'true' : true;
   });
+  const [translationPriority, setTranslationPriority] = useState<'english' | 'chinese'>(() => {
+    try {
+      return settingsStorage.get().translationPriority || 'english';
+    } catch {
+      return 'english';
+    }
+  });
 
   // 保存显示偏好到 localStorage
   useEffect(() => {
@@ -89,6 +156,14 @@ export default function ReaderPage() {
   useEffect(() => {
     localStorage.setItem('showChinese', String(showChinese));
   }, [showChinese]);
+
+  useEffect(() => {
+    try {
+      settingsStorage.update('translationPriority', translationPriority);
+    } catch (error) {
+      console.error('保存翻译优先级失败:', error);
+    }
+  }, [translationPriority]);
 
   useEffect(() => {
     localStorage.setItem('fontFamily', fontFamily);
@@ -103,6 +178,96 @@ export default function ReaderPage() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = loadLastReadingState();
+    if (saved) {
+      lastReadingStateRef.current = saved;
+      if (!searchParams.get('bookId') && saved.bookId) {
+        const params = new URLSearchParams(searchParams);
+        params.set('bookId', saved.bookId);
+        params.set('chapter', String(saved.chapterNumber || 1));
+        if (saved.source) {
+          params.set('from', saved.source);
+        }
+        navigate(`/reader?${params.toString()}`, { replace: true });
+      }
+    }
+  }, [navigate, searchParams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setIsMediumScreen(window.innerWidth >= 768);
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    isMediumScreenRef.current = isMediumScreen;
+  }, [isMediumScreen]);
+
+  useEffect(() => {
+    if (!isMediumScreen) {
+      setDictionaryMode(prev => (prev === 'fixed' ? 'floating' : prev));
+    }
+  }, [isMediumScreen]);
+
+  // 初始化翻译缓存（sessionStorage）
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cacheRaw = sessionStorage.getItem(TRANSLATION_CACHE_STORAGE_KEY);
+      if (cacheRaw) {
+        const parsed = JSON.parse(cacheRaw) as Record<string, DictionaryResult>;
+        translationCacheRef.current = new Map(Object.entries(parsed));
+      }
+    } catch (error) {
+      console.warn('恢复翻译缓存失败:', error);
+    }
+  }, []);
+
+  // 组件卸载时中止未完成的查询
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentBook) return;
+    const paramBookId = searchParams.get('bookId') || lastReadingStateRef.current?.bookId;
+    if (!paramBookId) return;
+
+    let isCancelled = false;
+    const fetchBook = async () => {
+      try {
+        setInitializingBook(true);
+        const response = await booksAPI.getBook(paramBookId);
+        if (!isCancelled) {
+          restoredScrollForChapterRef.current = null;
+          setCurrentBookState(response.data);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('加载书籍信息失败:', error);
+          setError('无法加载书籍信息');
+        }
+      } finally {
+        if (!isCancelled) {
+          setInitializingBook(false);
+        }
+      }
+    };
+
+    fetchBook();
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentBook, searchParams, setCurrentBookState]);
 
   // 滚动监听：隐藏/显示顶部栏 + 计算阅读进度
   useEffect(() => {
@@ -123,11 +288,30 @@ export default function ReaderPage() {
       const scrolled = currentScrollY;
       const progress = (scrolled / (documentHeight - windowHeight)) * 100;
       setReadingProgress(Math.min(Math.max(progress, 0), 100));
+
+      if (currentBook && (chapters[currentChapterIndex] || currentChapter)) {
+        const now = Date.now();
+        if (now - lastScrollPersistRef.current > SCROLL_PERSIST_INTERVAL) {
+          const activeChapterNumber =
+            chapters[currentChapterIndex]?.chapter_number || currentChapter?.chapter_number || 1;
+          progressStorage.save({
+            book_id: currentBook.id,
+            chapter_number: activeChapterNumber,
+            position: currentScrollY,
+            updated_at: new Date().toISOString(),
+          });
+          updateReadingState({
+            chapterNumber: activeChapterNumber,
+            scrollPosition: currentScrollY,
+          });
+          lastScrollPersistRef.current = now;
+        }
+      }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
+  }, [lastScrollY, currentBook, chapters, currentChapterIndex, currentChapter]);
 
   const fontSizeMap = {
     small: 'text-base',
@@ -143,6 +327,72 @@ export default function ReaderPage() {
     kai: 'font-[KaiTi]',
     fangsong: 'font-[FangSong]',
     system: 'font-system'
+  };
+
+  const persistTranslationCache = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cacheObject: Record<string, DictionaryResult> = {};
+      translationCacheRef.current.forEach((value, key) => {
+        cacheObject[key] = value;
+      });
+      sessionStorage.setItem(TRANSLATION_CACHE_STORAGE_KEY, JSON.stringify(cacheObject));
+    } catch (error) {
+      console.warn('持久化翻译缓存失败:', error);
+    }
+  };
+
+  const getCachedDefinition = (key: string): DictionaryResult | null => {
+    const cache = translationCacheRef.current;
+    if (!cache.has(key)) {
+      return null;
+    }
+    const value = cache.get(key)!;
+    cache.delete(key);
+    cache.set(key, value); // 访问后移动到 Map 尾部，符合 LRU
+    persistTranslationCache();
+    return value;
+  };
+
+  const setCachedDefinition = (key: string, value: DictionaryResult) => {
+    const cache = translationCacheRef.current;
+    if (cache.has(key)) {
+      cache.delete(key);
+    }
+    cache.set(key, value);
+    if (cache.size > MAX_TRANSLATION_CACHE_SIZE) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey) {
+        cache.delete(oldestKey);
+      }
+    }
+    persistTranslationCache();
+  };
+  const revealDictionaryPanel = () => {
+    setDictionaryMode(prev => {
+      if (prev === 'hidden') {
+        return isMediumScreenRef.current ? 'fixed' : 'floating';
+      }
+      return prev;
+    });
+  };
+
+  const updateReadingState = (updates: Partial<LastReadingState>) => {
+    if (typeof window === 'undefined' || !currentBook) return;
+    const activeChapter =
+      updates.chapterNumber ??
+      currentChapter?.chapter_number ??
+      chapters[currentChapterIndex]?.chapter_number ??
+      1;
+    const nextState: LastReadingState = {
+      bookId: updates.bookId || currentBook.id,
+      chapterNumber: activeChapter,
+      scrollPosition: updates.scrollPosition ?? window.scrollY,
+      source: updates.source ?? searchParams.get('from') ?? lastReadingStateRef.current?.source ?? null,
+      timestamp: Date.now(),
+    };
+    lastReadingStateRef.current = nextState;
+    persistLastReadingState(nextState);
   };
 
   // 加载章节列表
@@ -173,6 +423,15 @@ export default function ReaderPage() {
             // 从本地存储获取阅读进度
             const progress = progressStorage.get(currentBook.id);
             chapterIndex = progress ? progress.chapter_number - 1 : 0;
+            if (progress) {
+              lastReadingStateRef.current = {
+                bookId: currentBook.id,
+                chapterNumber: progress.chapter_number,
+                scrollPosition: progress.position || 0,
+                source: searchParams.get('from'),
+                timestamp: Date.now(),
+              };
+            }
             console.log(`从localStorage加载章节: ${chapterIndex + 1} (索引: ${chapterIndex})`);
           }
 
@@ -234,12 +493,22 @@ export default function ReaderPage() {
         setCurrentChapter(response.data);
 
         // 保存阅读进度
+        const savedState = lastReadingStateRef.current;
+        const savedPosition =
+          savedState &&
+          savedState.bookId === currentBook.id &&
+          savedState.chapterNumber === chapterNumber
+            ? savedState.scrollPosition
+            : 0;
         progressStorage.save({
           book_id: currentBook.id,
           chapter_number: chapterNumber,
-          position: 0,
+          position: savedPosition || 0,
           updated_at: new Date().toISOString(),
         });
+        if (savedPosition) {
+          console.log(`📌 已存储的滚动位置: ${savedPosition}px`);
+        }
       } catch (err) {
         console.error('Failed to load chapter:', err);
         setError('无法加载章节内容');
@@ -250,6 +519,33 @@ export default function ReaderPage() {
 
     loadChapter();
   }, [currentBook, chapters, currentChapterIndex]);
+
+  useEffect(() => {
+    if (!currentBook || !currentChapter) return;
+    const key = `${currentBook.id}-${currentChapter.chapter_number}`;
+    if (restoredScrollForChapterRef.current === key) return;
+    let targetScroll = 0;
+    const savedState = lastReadingStateRef.current;
+    if (
+      savedState &&
+      savedState.bookId === currentBook.id &&
+      savedState.chapterNumber === currentChapter.chapter_number
+    ) {
+      targetScroll = savedState.scrollPosition || 0;
+    } else {
+      const storedProgress = progressStorage.get(currentBook.id);
+      if (storedProgress && storedProgress.chapter_number === currentChapter.chapter_number) {
+        targetScroll = storedProgress.position || 0;
+      }
+    }
+    requestAnimationFrame(() => {
+      window.scrollTo(0, targetScroll);
+    });
+    if (targetScroll > 0) {
+      console.log(`🧭 恢复滚动位置: ${targetScroll}px`);
+    }
+    restoredScrollForChapterRef.current = key;
+  }, [currentBook, currentChapter]);
 
   // 从点击位置提取单词
   const getWordAtPoint = (x: number, y: number): string | null => {
@@ -322,28 +618,119 @@ export default function ReaderPage() {
     }
   }, [currentChapter]);
 
-  // 查询单词释义（后端返回中英文全部）
+  const filteredMeanings = useMemo(() => {
+    if (!wordDefinition) return [];
+
+    const preferredLang = translationPriority === 'english' ? 'en' : 'zh';
+    const secondaryLang = preferredLang === 'en' ? 'zh' : 'en';
+    const weight = (meaning: any) => {
+      const lang = (meaning.lang || 'en').toLowerCase();
+      if (lang === preferredLang) return 0;
+      if (lang === secondaryLang) return 1;
+      return 2;
+    };
+
+    return wordDefinition.meanings
+      .filter((meaning: any) => {
+        const lang = (meaning.lang || 'en').toLowerCase();
+        if (lang === 'en' && !showEnglish) return false;
+        if (lang === 'zh' && !showChinese) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => weight(a) - weight(b));
+  }, [wordDefinition, showEnglish, showChinese, translationPriority]);
+
   useEffect(() => {
+    if (!wordDefinition) return;
+    console.log('📘 收到词典数据:', wordDefinition);
+    const chineseMeanings = (wordDefinition.meanings || []).filter(
+      (meaning: any) => (meaning.lang || 'en').toLowerCase() === 'zh'
+    );
+    console.log(`📙 中文释义数量: ${chineseMeanings.length}`, chineseMeanings);
+  }, [wordDefinition]);
+
+  const stickyTopOffset = showTopBar ? '5rem' : '1.5rem';
+  const stickyMaxHeight = showTopBar ? 'calc(100vh - 5rem)' : 'calc(100vh - 2rem)';
+  const floatingWindowWidth = Math.min(
+    floatingSize.width,
+    Math.max(320, viewportSize.width - 24)
+  );
+  const floatingWindowHeight = Math.min(
+    floatingSize.height,
+    Math.max(320, viewportSize.height - 120)
+  );
+
+  useEffect(() => {
+    if (dictionaryMode !== 'floating') return;
+    setFloatingPosition(pos => {
+      const maxX = Math.max(16, viewportSize.width - floatingWindowWidth - 16);
+      const maxY = Math.max(16, viewportSize.height - floatingWindowHeight - 16);
+      const clampedX = Math.min(Math.max(pos.x, 16), maxX);
+      const clampedY = Math.min(Math.max(pos.y, 80), maxY);
+      if (clampedX === pos.x && clampedY === pos.y) {
+        return pos;
+      }
+      return { x: clampedX, y: clampedY };
+    });
+  }, [dictionaryMode, viewportSize.width, viewportSize.height, floatingWindowWidth, floatingWindowHeight]);
+
+  // 查询单词释义（后端返回中英文全部），带缓存与请求取消
+  useEffect(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
     if (!selectedWord) {
       setWordDefinition(null);
+      setLookupLoading(false);
       return;
     }
 
     const lookupWord = async () => {
+      const normalizedWord = selectedWord.trim().toLowerCase();
+      if (!normalizedWord) {
+        setWordDefinition(null);
+        return;
+      }
+
+      revealDictionaryPanel();
+
+      const cached = getCachedDefinition(normalizedWord);
+      if (cached) {
+        console.log('📦 命中翻译缓存:', normalizedWord, cached);
+        setWordDefinition(cached);
+        setLookupLoading(false);
+        return;
+      }
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
         setLookupLoading(true);
-        const response = await dictionaryAPI.lookup(selectedWord);
+        const response = await dictionaryAPI.lookup(normalizedWord, { signal: controller.signal });
         const data = response.data;
+        console.log('📥 词典网络响应:', normalizedWord, data);
+        console.log('📖 词典释义明细:', data?.meanings);
         setWordDefinition(data);
+        revealDictionaryPanel();
 
-        // 调试日志：显示接收到的释义数量
+        setCachedDefinition(normalizedWord, data);
+
         if (data && data.meanings) {
-          console.log(`前端接收到 ${data.meanings.length} 个meanings，共 ${data.meanings.reduce((sum, m) => sum + (m.definitions?.length || 0), 0)} 条释义`);
+          const totalDefinitions = data.meanings.reduce((sum, m) => sum + (m.definitions?.length || 0), 0);
+          console.log(`前端接收到 ${data.meanings.length} 个meanings，共 ${totalDefinitions} 条释义`);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+          console.log(`查询已取消: ${normalizedWord}`);
+          return;
+        }
         console.error('Failed to lookup word:', err);
         setWordDefinition(null);
       } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
         setLookupLoading(false);
       }
     };
@@ -411,6 +798,14 @@ export default function ReaderPage() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!currentBook || !currentChapter) return;
+    updateReadingState({
+      bookId: currentBook.id,
+      chapterNumber: currentChapter.chapter_number,
+    });
+  }, [currentBook, currentChapter]);
 
   // 拖拽调整侧边栏宽度
   const handleDragStart = (e: React.MouseEvent) => {
@@ -561,6 +956,9 @@ export default function ReaderPage() {
   const buildChapterUrl = (chapterNumber: number) => {
     const params = new URLSearchParams(searchParams);
     params.set('chapter', String(chapterNumber));
+     if (currentBook) {
+       params.set('bookId', currentBook.id);
+     }
     return `/reader?${params.toString()}`;
   };
 
@@ -572,6 +970,8 @@ export default function ReaderPage() {
       setCurrentChapterIndex(newIndex);
       setSelectedWord(null);
       navigate(buildChapterUrl(newChapterNumber), { replace: true });
+      restoredScrollForChapterRef.current = null;
+      updateReadingState({ chapterNumber: newChapterNumber, scrollPosition: 0 });
     }
   };
 
@@ -582,11 +982,21 @@ export default function ReaderPage() {
       setCurrentChapterIndex(newIndex);
       setSelectedWord(null);
       navigate(buildChapterUrl(newChapterNumber), { replace: true });
+      restoredScrollForChapterRef.current = null;
+      updateReadingState({ chapterNumber: newChapterNumber, scrollPosition: 0 });
     }
   };
 
   // 如果没有选中书籍，显示提示
   if (!currentBook) {
+    if (initializingBook) {
+      return (
+        <main className="flex-grow flex flex-col items-center justify-center bg-[#FDFBF7]">
+          <Loader2 className="w-10 h-10 text-teal-600 animate-spin mb-4" />
+          <p className="text-gray-600">正在恢复阅读状态...</p>
+        </main>
+      );
+    }
     return (
       <main className="flex-grow flex flex-col items-center justify-center bg-[#FDFBF7]">
         <AlertCircle className="w-16 h-16 text-gray-400 mb-4" />
@@ -797,6 +1207,35 @@ export default function ReaderPage() {
                 <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>显示中文翻译</span>
               </label>
             </div>
+            <div className="mt-4">
+              <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                翻译优先级
+              </label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="translation-priority"
+                    value="english"
+                    checked={translationPriority === 'english'}
+                    onChange={() => setTranslationPriority('english')}
+                    className="text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>英文优先</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="translation-priority"
+                    value="chinese"
+                    checked={translationPriority === 'chinese'}
+                    onChange={() => setTranslationPriority('chinese')}
+                    className="text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>中文优先</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -916,12 +1355,12 @@ export default function ReaderPage() {
           {/* 词典侧边栏 - 隐藏模式时不显示 */}
           {dictionaryMode === 'fixed' && (
             <div
-              className={`border-l hidden lg:flex flex-col p-6 relative ${
+              className={`border-l hidden md:flex flex-col p-6 relative ${
                 theme === 'dark'
                   ? 'border-[#333] bg-[#2a2a2a]'
                   : 'border-[#EAE4D6] bg-white'
               }`}
-              style={{ width: `${sidebarWidth}px` }}
+              style={{ width: `${sidebarWidth}px`, minHeight: '100%' }}
             >
               {/* 拖拽手柄 */}
               <div
@@ -937,7 +1376,10 @@ export default function ReaderPage() {
                 </div>
               </div>
 
-              <div className="sticky top-20 flex flex-col max-h-[calc(100vh-6rem)]">
+              <div
+                className="sticky flex flex-col min-h-0"
+                style={{ top: stickyTopOffset, maxHeight: stickyMaxHeight }}
+              >
                 {/* 标题和控制按钮 */}
                 <div className="flex items-center justify-between mb-4">
                   <h4 className={`text-xs font-bold uppercase ${theme === 'dark' ? 'text-gray-400' : 'text-gray-400'}`}>
@@ -972,8 +1414,10 @@ export default function ReaderPage() {
                 </div>
               {selectedWord ? (
                 lookupLoading ? (
-                  <div className="flex items-center justify-center py-10">
-                    <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <Loader2 className="w-6 h-6 text-teal-600 animate-spin mb-3" />
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>正在查询翻译...</p>
+                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>请稍候，结果加载中</p>
                   </div>
                 ) : wordDefinition ? (
                   <>
@@ -1020,16 +1464,8 @@ export default function ReaderPage() {
                         )}
                       </div>
 
-                      {/* 释义列表（根据显示偏好过滤） */}
-                      {wordDefinition.meanings
-                        .filter((meaning: any) => {
-                          // 根据用户的显示偏好过滤
-                          const lang = meaning.lang || 'en';
-                          if (lang === 'en' && !showEnglish) return false;
-                          if (lang === 'zh' && !showChinese) return false;
-                          return true;
-                        })
-                        .map((meaning: any, idx: number) => (
+                      {/* 释义列表（根据显示偏好与优先级排序） */}
+                      {filteredMeanings.map((meaning: any, idx: number) => (
                           <div key={idx} className={`mt-4 pb-3 border-b last:border-0 ${
                             theme === 'dark' ? 'border-[#444]' : 'border-gray-100'
                           }`}>
@@ -1133,8 +1569,8 @@ export default function ReaderPage() {
               style={{
                 left: `${floatingPosition.x}px`,
                 top: `${floatingPosition.y}px`,
-                width: `${floatingSize.width}px`,
-                height: `${floatingSize.height}px`,
+                width: `${floatingWindowWidth}px`,
+                height: `${floatingWindowHeight}px`,
                 zIndex: 50
               }}
             >
@@ -1150,11 +1586,16 @@ export default function ReaderPage() {
                 </h4>
                 <div className="flex gap-1">
                   <button
-                    title="固定到侧边栏"
-                    onClick={() => setDictionaryMode('fixed')}
+                    title={isMediumScreen ? '固定到侧边栏' : '仅在较大屏幕可固定'}
+                    disabled={!isMediumScreen}
+                    onClick={() => {
+                      if (isMediumScreen) {
+                        setDictionaryMode('fixed');
+                      }
+                    }}
                     className={`p-1 rounded hover:bg-opacity-20 ${
                       theme === 'dark' ? 'hover:bg-gray-600' : 'hover:bg-gray-200'
-                    }`}
+                    } ${!isMediumScreen ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     <PanelRightClose className="w-3.5 h-3.5 text-gray-400" />
                   </button>
@@ -1174,8 +1615,10 @@ export default function ReaderPage() {
               <div className="flex-1 overflow-y-auto p-4">
                 {selectedWord ? (
                   lookupLoading ? (
-                    <div className="flex items-center justify-center py-10">
-                      <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
+                    <div className="flex flex-col items-center justify-center py-10">
+                      <Loader2 className="w-6 h-6 text-teal-600 animate-spin mb-3" />
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>正在查询翻译...</p>
+                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>请稍候，结果加载中</p>
                     </div>
                   ) : wordDefinition ? (
                     <>
@@ -1217,14 +1660,7 @@ export default function ReaderPage() {
                       </div>
 
                       {/* 释义列表 */}
-                      {wordDefinition.meanings
-                        .filter((meaning: any) => {
-                          const lang = meaning.lang || 'en';
-                          if (lang === 'en' && !showEnglish) return false;
-                          if (lang === 'zh' && !showChinese) return false;
-                          return true;
-                        })
-                        .map((meaning: any, idx: number) => (
+                      {filteredMeanings.map((meaning: any, idx: number) => (
                           <div key={idx} className={`mt-4 pb-3 border-b last:border-0 ${
                             theme === 'dark' ? 'border-[#444]' : 'border-gray-100'
                           }`}>
@@ -1378,13 +1814,13 @@ export default function ReaderPage() {
       {/* 显示词典按钮 - 词典隐藏时显示 */}
       {dictionaryMode === 'hidden' && (
         <button
-          onClick={() => setDictionaryMode('fixed')}
+          onClick={() => setDictionaryMode(isMediumScreen ? 'fixed' : 'floating')}
           className={`fixed bottom-20 right-6 z-40 p-3 rounded-full shadow-xl transition-all ${
             theme === 'dark'
               ? 'bg-teal-600 hover:bg-teal-700 text-white'
               : 'bg-teal-600 hover:bg-teal-700 text-white'
           }`}
-          title="显示词典"
+          title={isMediumScreen ? '显示侧边词典' : '打开悬浮词典'}
         >
           <Eye className="w-5 h-5" />
         </button>

@@ -88,12 +88,27 @@ export const progressStorage = {
 export const settingsStorage = {
   // 获取设置
   get: (): ReaderSettings => {
-    const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return data ? JSON.parse(data) : {
+    const defaults: ReaderSettings = {
       font_size: 'medium',
       line_height: 1.8,
       theme: 'light',
+      translationPriority: 'english',
     };
+    const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (!data) return defaults;
+
+    try {
+      const parsed = JSON.parse(data);
+      return {
+        font_size: parsed.font_size || defaults.font_size,
+        line_height: typeof parsed.line_height === 'number' ? parsed.line_height : defaults.line_height,
+        theme: parsed.theme || defaults.theme,
+        translationPriority: parsed.translationPriority || defaults.translationPriority,
+      };
+    } catch (error) {
+      console.error('读取设置失败，使用默认值:', error);
+      return defaults;
+    }
   },
 
   // 保存设置

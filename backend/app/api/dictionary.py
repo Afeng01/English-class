@@ -1,9 +1,12 @@
 from fastapi import APIRouter, HTTPException
+import asyncio
 import httpx
 import os
 import hashlib
 import time
 import uuid
+import json
+import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from nltk.stem import WordNetLemmatizer
@@ -27,6 +30,8 @@ CACHE_EXPIRE_HOURS = 24  # 缓存24小时
 
 # 初始化词形还原器
 lemmatizer = WordNetLemmatizer()
+PUNCTUATION_MARKS = set(",.;!?，。！？；：、“”\"'()")
+EXPLAIN_SPLIT_PATTERN = re.compile(r'[；;，、]+')
 
 
 # ==================== 缓存辅助函数 ====================
@@ -40,6 +45,16 @@ def get_from_cache(word: str) -> Optional[dict]:
         else:
             del _dictionary_cache[word_lower]
     return None
+
+
+def is_phrase_or_sentence(text: str) -> bool:
+    """简单判断查询是否为短语/句子（包含空格或标点）"""
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if any(ch.isspace() for ch in stripped):
+        return True
+    return any(ch in PUNCTUATION_MARKS for ch in stripped)
 
 
 def save_to_cache(word: str, result: dict):
@@ -160,40 +175,25 @@ def truncate(q: str) -> str:
 
 
 async def query_free_dictionary(client: httpx.AsyncClient, word: str) -> Optional[dict]:
-    """查询 Free Dictionary API（英文词典，免费）
-
-    返回格式：
-    {
-        "word": "hello",
-        "phonetic": "/həˈləʊ/",
-        "meanings": [
-            {
-                "partOfSpeech": "noun",
-                "definitions": [
-                    {
-                        "definition": "A greeting said when meeting someone.",
-                        "example": "Hello, everyone."
-                    }
-                ]
-            }
-        ]
-    }
-    """
+    """查询 Free Dictionary API（英文词典，免费）"""
+    start_time = time.time()
     try:
         url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.lower()}"
-        response = await client.get(url, timeout=5.0)
+        response = await client.get(url, timeout=2.0)
 
         if response.status_code != 200:
+            elapsed = (time.time() - start_time) * 1000
+            print(f"❌ Free Dictionary HTTP错误 {response.status_code}: {word} ({elapsed:.0f}ms)")
             return None
 
         data = response.json()
         if not data or not isinstance(data, list) or len(data) == 0:
+            elapsed = (time.time() - start_time) * 1000
+            print(f"ℹ️ Free Dictionary无结果: {word} ({elapsed:.0f}ms)")
             return None
 
-        # Free Dictionary API 返回的是数组，取第一个结果
         entry = data[0]
 
-        # 提取音标（优先使用通用音标，然后是美式、英式）
         phonetic = entry.get('phonetic', '')
         if not phonetic and 'phonetics' in entry:
             for p in entry.get('phonetics', []):
@@ -201,7 +201,6 @@ async def query_free_dictionary(client: httpx.AsyncClient, word: str) -> Optiona
                     phonetic = p['text']
                     break
 
-        # 提取所有释义（不限制数量）
         meanings = []
         for meaning in entry.get('meanings', []):
             part_of_speech = meaning.get('partOfSpeech', '')
@@ -217,26 +216,29 @@ async def query_free_dictionary(client: httpx.AsyncClient, word: str) -> Optiona
                 meanings.append({
                     "partOfSpeech": part_of_speech,
                     "definitions": definitions,
-                    "lang": "en"  # 标记为英文释义
+                    "lang": "en"
                 })
 
         if not meanings:
+            elapsed = (time.time() - start_time) * 1000
+            print(f"ℹ️ Free Dictionary无释义: {word} ({elapsed:.0f}ms)")
             return None
 
-        result = {
+        elapsed = (time.time() - start_time) * 1000
+        print(f"✅ Free Dictionary返回 {len(meanings)} 个词性释义: {word} ({elapsed:.0f}ms)")
+        return {
             "word": entry.get('word', word),
             "phonetic": phonetic,
             "meanings": meanings,
         }
 
-        print(f"✅ Free Dictionary返回 {len(meanings)} 个词性释义: {word}")
-        return result
-
     except httpx.TimeoutException:
-        print(f"Free Dictionary超时: {word}")
+        elapsed = (time.time() - start_time) * 1000
+        print(f"⏱️ Free Dictionary超时: {word} ({elapsed:.0f}ms)")
         return None
     except Exception as e:
-        print(f"Free Dictionary异常: {e}")
+        elapsed = (time.time() - start_time) * 1000
+        print(f"Free Dictionary异常: {e} ({elapsed:.0f}ms)")
         return None
 
 
@@ -262,6 +264,7 @@ async def query_youdao_translate(client: httpx.AsyncClient, word: str) -> Option
         print(f"⚠️  有道API未配置，跳过翻译")
         return None
 
+    start_time = time.time()
     try:
         # 生成请求参数
         salt = str(uuid.uuid4())
@@ -284,18 +287,27 @@ async def query_youdao_translate(client: httpx.AsyncClient, word: str) -> Option
             'curtime': curtime,
         }
 
-        response = await client.get(YOUDAO_DICT_API, params=params, timeout=5.0)
+        response = await client.get(YOUDAO_DICT_API, params=params, timeout=3.0)
 
         if response.status_code != 200:
-            print(f"❌ 有道API HTTP错误: {response.status_code}")
+            elapsed = (time.time() - start_time) * 1000
+            print(f"❌ 有道API HTTP错误: {response.status_code} ({elapsed:.0f}ms)")
             return None
 
         data = response.json()
+        try:
+            print("=" * 50)
+            print(f"📥 有道API完整响应({word}):")
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+            print("=" * 50)
+        except Exception as log_error:
+            print(f"⚠️ 有道API响应日志写入失败: {log_error}")
 
         # 检查错误码
         error_code = data.get('errorCode')
         if error_code != '0':
-            print(f"❌ 有道API错误码: {error_code}")
+            elapsed = (time.time() - start_time) * 1000
+            print(f"❌ 有道API错误码: {error_code} ({elapsed:.0f}ms)")
             # 常见错误码说明
             error_messages = {
                 '101': '缺少必填的参数',
@@ -316,6 +328,9 @@ async def query_youdao_translate(client: httpx.AsyncClient, word: str) -> Option
         # 解析有道词典响应
         basic = data.get('basic', {})
         translation = data.get('translation', [])
+        print(f"📑 basic字段: {json.dumps(basic, ensure_ascii=False) if basic else '{}'}")
+        print(f"🌐 web字段数量: {len(data.get('web', []) or [])}")
+        print(f"🔁 translation字段: {json.dumps(translation, ensure_ascii=False)}")
 
         if not basic and not translation:
             return None
@@ -327,26 +342,114 @@ async def query_youdao_translate(client: httpx.AsyncClient, word: str) -> Option
         explains = basic.get('explains', [])
         if explains:
             for explain in explains:  # 显示全部释义
-                # 有道的explains格式：["n. 世界；地球", "v. 打招呼"]
+                text = explain.strip()
+                part_of_speech = ""
+                content = text
+                if '.' in text:
+                    prefix, rest = text.split('.', 1)
+                    if len(prefix.strip()) <= 6:
+                        part_of_speech = prefix.strip()
+                        content = rest.strip()
+                fragments = [frag.strip() for frag in EXPLAIN_SPLIT_PATTERN.split(content) if frag.strip()]
+                if not fragments:
+                    fragments = [content]
                 meanings.append({
-                    "partOfSpeech": "",
+                    "partOfSpeech": part_of_speech,
                     "definitions": [{
-                        "definition": explain,
+                        "definition": fragment,
                         "example": ""
-                    }],
+                    } for fragment in fragments],
                     "lang": "zh"  # 标记为中文翻译
                 })
-        elif translation:
-            # 如果没有basic，使用translation（短语/句子翻译）
-            for trans in translation:  # 显示全部翻译
+
+        # 补充机器翻译结果
+        if translation:
+            for trans in translation:
+                if not trans:
+                    continue
                 meanings.append({
-                    "partOfSpeech": "",
+                    "partOfSpeech": "翻译",
                     "definitions": [{
                         "definition": trans,
                         "example": ""
                     }],
-                    "lang": "zh"  # 标记为中文翻译
+                    "lang": "zh"
                 })
+
+        # 解析 web 字段的网络释义（通常包含更口语化的翻译）
+        web_entries = data.get('web', [])
+        for entry in web_entries:
+            values = entry.get('value', [])
+            if not values:
+                continue
+
+            definitions = []
+            for value in values:
+                if not value:
+                    continue
+                definitions.append({
+                    "definition": value,
+                    "example": entry.get('key', "")
+                })
+
+            if definitions:
+                meanings.append({
+                    "partOfSpeech": "网络释义",
+                    "definitions": definitions,
+                    "lang": "zh"
+                })
+
+        # 解析词形变化
+        wfs = basic.get('wfs', [])
+        wf_definitions = []
+        for wf_entry in wfs:
+            wf = wf_entry.get('wf', {})
+            value = wf.get('value')
+            if not value:
+                continue
+            name = wf.get('name')
+            label = f"{name or '词形'}: {value}"
+            wf_definitions.append({
+                "definition": label,
+                "example": ""
+            })
+        if wf_definitions:
+            meanings.append({
+                "partOfSpeech": "词形变化",
+                "definitions": wf_definitions,
+                "lang": "zh"
+            })
+
+        # 解析例句（若有）
+        def add_sentence_meanings(entries, label: str):
+            if not entries:
+                return
+            sentence_definitions = []
+            for sentence in entries:
+                if not isinstance(sentence, dict):
+                    continue
+                cn = sentence.get('sCn') or sentence.get('cn') or sentence.get('tran') or sentence.get('translation') or sentence.get('target')
+                en = sentence.get('sContent') or sentence.get('content') or sentence.get('source') or sentence.get('sentence')
+                text = cn or en
+                if not text:
+                    continue
+                sentence_definitions.append({
+                    "definition": text,
+                    "example": en or ""
+                })
+            if sentence_definitions:
+                meanings.append({
+                    "partOfSpeech": label,
+                    "definitions": sentence_definitions,
+                    "lang": "zh"
+                })
+
+        sentence_entries = data.get('sentence') or []
+        sentence_entries_alt = data.get('sentences') or []
+        example_entries = data.get('examples') or []
+        add_sentence_meanings(sentence_entries, "例句")
+        add_sentence_meanings(sentence_entries_alt, "例句")
+        add_sentence_meanings(example_entries, "例句")
 
         if not meanings:
             return None
@@ -357,16 +460,27 @@ async def query_youdao_translate(client: httpx.AsyncClient, word: str) -> Option
             "meanings": meanings,
         }
 
-        # 打印释义数量，用于调试
-        print(f"✅ 有道API返回 {len(meanings)} 条释义: {word}")
+        try:
+            print(
+                f"📊 有道API统计({word}): explains={len(explains)} "
+                f"translation={len(translation)} web={len(web_entries)} "
+                f"wfs={len(wfs)} sentence={len(sentence_entries) + len(sentence_entries_alt) + len(example_entries)} meanings={len(meanings)}"
+            )
+            print(f"📚 有道解析释义({word}): {json.dumps(meanings, ensure_ascii=False)}")
+        except Exception as log_error:
+            print(f"⚠️ 有道解析日志写入失败: {log_error}")
+        elapsed = (time.time() - start_time) * 1000
+        print(f"✅ 有道API返回 {len(meanings)} 条释义: {word} ({elapsed:.0f}ms)")
 
         return result
 
     except httpx.TimeoutException:
-        print(f"有道API超时: {word}")
+        elapsed = (time.time() - start_time) * 1000
+        print(f"有道API超时: {word} ({elapsed:.0f}ms)")
         return None
     except Exception as e:
-        print(f"有道API异常: {e}")
+        elapsed = (time.time() - start_time) * 1000
+        print(f"有道API异常: {e} ({elapsed:.0f}ms)")
         return None
 
 
@@ -394,32 +508,62 @@ async def lookup_word(word: str):
     """
     import time
     start_time = time.time()
+    query_type = "phrase" if is_phrase_or_sentence(word) else "word"
+    print(f"🔍 查询请求: {word} (类型: {query_type})")
 
     # 0. 先检查缓存
+    cache_check_start = time.time()
     cached_result = get_from_cache(word)
+    cache_elapsed = (time.time() - cache_check_start) * 1000
+    print(f"⏱️ 缓存检查耗时: {cache_elapsed:.0f}ms (命中: {'是' if cached_result else '否'})")
     if cached_result:
-        elapsed = (time.time() - start_time) * 1000
-        print(f"✅ 缓存命中: {word} ({elapsed:.0f}ms)")
+        total_elapsed = (time.time() - start_time) * 1000
+        print(f"✅ 缓存命中: {word} (总耗时 {total_elapsed:.0f}ms)")
         return DictionaryResponse(**cached_result)
 
     async with httpx.AsyncClient() as client:
         try:
+            lemma = None
             english_entry = None
             chinese_entry = None
-            lemma = None
 
-            # 1. 查询英文释义
-            english_entry = await query_free_dictionary(client, word)
+            if query_type == "phrase":
+                phrase_start = time.time()
+                chinese_entry = await query_youdao_translate(client, word)
+                phrase_elapsed = (time.time() - phrase_start) * 1000
+                print(f"⚡ 查询路线: 短语/句子 → 有道 ({phrase_elapsed:.0f}ms)")
+                if not chinese_entry:
+                    print("⚠️ 短语翻译为空，尝试英文词典回退")
+                    english_entry = await query_free_dictionary(client, word)
+            else:
+                api_start = time.time()
+                english_result, chinese_result = await asyncio.gather(
+                    query_free_dictionary(client, word),
+                    query_youdao_translate(client, word),
+                    return_exceptions=True
+                )
+                elapsed = (time.time() - api_start) * 1000
+                print(f"⚡ 查询路线: 单词 → 并发(英文+中文) ({elapsed:.0f}ms)")
 
-            # 2. 如果英文查不到，尝试词形还原
-            if not english_entry:
-                lemma = lemmatize_word(word)
-                if lemma != word.lower():
-                    print(f"🔄 词形还原: {word} → {lemma}")
-                    english_entry = await query_free_dictionary(client, lemma)
+                english_entry = None if isinstance(english_result, Exception) else english_result
+                chinese_entry = None if isinstance(chinese_result, Exception) else chinese_result
 
-            # 3. 查询中文翻译（并行进行，不管英文是否成功）
-            chinese_entry = await query_youdao_translate(client, word)
+                if isinstance(english_result, Exception):
+                    print(f"❌ 英文释义查询异常: {english_result}")
+                if isinstance(chinese_result, Exception):
+                    print(f"❌ 中文翻译查询异常: {chinese_result}")
+
+                # 词形还原重试仅针对英文释义
+                if not english_entry:
+                    lemma_candidate = lemmatize_word(word)
+                    if lemma_candidate != word.lower():
+                        lemma = lemma_candidate
+                        print(f"🔄 词形还原: {word} → {lemma}")
+                        retry_start = time.time()
+                        retry_result = await query_free_dictionary(client, lemma)
+                        retry_elapsed = (time.time() - retry_start) * 1000
+                        print(f"↩️  词形还原英文查询耗时: {retry_elapsed:.0f}ms")
+                        english_entry = retry_result
 
             # 4. 合并结果
             if not english_entry and not chinese_entry:
@@ -465,10 +609,12 @@ async def lookup_word(word: str):
             save_to_cache(word, result.model_dump())
 
             elapsed = (time.time() - start_time) * 1000
-            print(f"✅ 查询成功: {word} (英文+中文, {elapsed:.0f}ms)")
+            print(f"✅ 查询成功: {word} (总耗时 {elapsed:.0f}ms)")
             return result
 
         except HTTPException:
+            total_elapsed = (time.time() - start_time) * 1000
+            print(f"❌ 查询失败(HTTP): {word} ({total_elapsed:.0f}ms)")
             raise
         except Exception as e:
             elapsed = (time.time() - start_time) * 1000

@@ -81,13 +81,15 @@ export const migrateLocalData = async (): Promise<{
       font_size: 'medium' as const,
       line_height: 1.8,
       theme: 'light' as const,
+      translationPriority: 'english' as const,
     }
 
     // 检查设置是否与默认值不同
     const hasCustomSettings =
       localSettings.font_size !== defaultSettings.font_size ||
       localSettings.line_height !== defaultSettings.line_height ||
-      localSettings.theme !== defaultSettings.theme
+      localSettings.theme !== defaultSettings.theme ||
+      localSettings.translationPriority !== defaultSettings.translationPriority
 
     if (hasCustomSettings) {
       console.log('发现自定义设置，开始迁移...')

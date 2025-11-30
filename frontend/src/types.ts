@@ -81,4 +81,5 @@ export interface ReaderSettings {
   font_size: 'small' | 'medium' | 'large' | 'xlarge';
   line_height: number;
   theme: 'light' | 'dark' | 'sepia';
+  translationPriority: 'english' | 'chinese';
 }

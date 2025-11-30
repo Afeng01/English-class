@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import type {
   Book,
   BookDetail,
@@ -101,8 +102,8 @@ export const booksAPI = {
 // 词典相关 API
 export const dictionaryAPI = {
   // 查询单词（后端返回中英文全部结果）
-  lookup: (word: string) =>
-    api.get<DictionaryResult>(`/dictionary/${word}`),
+  lookup: (word: string, config?: AxiosRequestConfig) =>
+    api.get<DictionaryResult>(`/dictionary/${word}`, config),
 };
 
 // 管理员相关 API

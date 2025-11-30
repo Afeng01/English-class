@@ -98,6 +98,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     font_size: 'medium',
     line_height: 1.8,
     theme: 'light',
+    translationPriority: 'english',
   },
   settingsLoading: false,
   loadSettings: async () => {

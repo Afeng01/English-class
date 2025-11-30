@@ -1,3 +1,84 @@
+## 翻译性能与阅读状态修复日志
+记录时间: 2025-11-30 15:02 (UTC+8)
+
+### 工具留痕
+- 14:20-14:55 `apply_patch frontend/src/components/ReaderPage.tsx`（多次）→ 引入阅读状态持久化（URL + localStorage）、自动恢复书籍/章节/滚动位置、滚动节流保存以及词典调试日志。
+- 14:26 `apply_patch backend/app/api/dictionary.py` → 重写 Free Dictionary/有道API 计时与日志、缩短超时、短语查询路径日志、中文释义结构化输出。
+- 14:58 `npm run build`（frontend/）→ 验证 TypeScript 通过。
+- 14:59 `python -m compileall app/api/dictionary.py`（backend/）→ 校验后端语法。
+
+### 实施要点
+1. 前端点击单词后立即触发 `revealDictionaryPanel`，并在缓存命中/网络返回时输出 wordDefinition & 中文释义调试信息；新增阅读状态引用 `reader_last_state` 保存书籍/章节/滚动，刷新后自动恢复。
+2. 滚动事件利用 500ms 节流写入 `progressStorage` + 本地状态，章节切换/加载时恢复至最近位置，并确保 URL 始终包含 bookId + chapter，防止刷新丢失上下文。
+3. 后端为 Free Dictionary 与有道请求加入完整性能日志（缓存检查、路由耗时、API原始响应、各字段统计、最终 meanings 列表），并将 Free Dictionary 超时降到 2s、有道降到 3s；短语/句子仍直接走有道以规避串行等待。
+
+---
+
+## 翻译体验二次优化日志
+记录时间: 2025-11-30 14:15 (UTC+8)
+
+### 工具留痕
+- 13:35 `apply_patch frontend/src/components/ReaderPage.tsx`（多次）→ 新增 `revealDictionaryPanel`、缓存 LRU 调整与响应式更新，使点击单词立即显示词典。
+- 13:50 `apply_patch backend/app/api/dictionary.py` → 引入 `re`、短语检测工具方法、降低 Free Dictionary 超时，并为有道接口打印完整 JSON。
+- 13:55 `apply_patch backend/app/api/dictionary.py` → 针对短语请求跳过英文词典、记录耗时、维持单词并发策略。
+- 14:00 `apply_patch backend/app/api/dictionary.py` → 扩展有道中文解析：拆分 explains、追加 translation/wfs/例句，并在日志中统计各类数据。
+- 14:05 `npm run build`（frontend/）→ 验证前端编译通过（Browserslist 过期提示可忽略）。
+- 14:06 `python -m compileall app/api/dictionary.py`（backend/）→ 验证后端语法正确。
+
+### 实施要点
+1. 点击任意单词即触发 `revealDictionaryPanel`，在桌面恢复固定侧栏，小屏弹出悬浮窗，彻底消除“手动点按钮”流程。
+2. `lookup_word` 根据是否含空格/标点区分“word”与“phrase”查询，短语直接走有道线路，并在日志输出路由与耗时，常规单词保留英文+中文并发与词形回退。
+3. 有道解析扩展至拆分 `explains`、补充 `translation`、`wfs`、`web` 与（若存在的）`sentence/examples` 字段，日志打印完整 JSON + 统计值，前端即可展示更丰富中文释义。
+4. 翻译缓存继续使用 LRU，但现在命中/网络响应会 `console.log` 并自动展开词典界面，便于调试实际返回内容。
+
+---
+
+## 翻译功能回归修复日志
+记录时间: 2025-11-30 13:26 (UTC+8)
+
+### 工具留痕
+- 13:12 `shell:sed -n '1,40p' backend/app/api/dictionary.py` → 确认 import 区块准备注入日志依赖。
+- 13:13 `apply_patch`（backend/app/api/dictionary.py）→ 引入 `json` 模块并打印有道 API 原始响应、统计与解析结果。
+- 13:16 `sed -n '1,220p' frontend/src/components/ReaderPage.tsx` → 复查阅读器状态管理和词典渲染结构，定位缓存/布局改动点。
+- 13:18 起多次 `apply_patch`（ReaderPage.tsx）→ 实现翻译缓存 LRU、AbortController 日志、动态 sticky top、响应式断点与按钮行为。
+- 13:24 `apply_patch`（frontend/src/services/api.ts` 等）→ （前序任务）确保 axios 支持传入 `signal`，此次沿用。
+- 13:25 `date` → 记录日志时间戳。
+
+### 实施要点
+1. 后端记录有道 API 原始返回及解析统计，便于确认多条释义是否配送至前端。
+2. 前端建立 100 条 LRU 缓存并在命中/写入时持久化，附加详细 `console.log` 说明响应来源与内容。
+3. 词典 UI 依据 `showTopBar` 动态设置 sticky `top`/高度，避免顶部收起时留白；并以 `md` 断点展示侧边栏，小屏改为弹出浮窗+按钮。
+4. 浮窗尺寸/位置会随视口收缩自动收敛，保证在分屏或窄窗口下亦可使用翻译面板。
+
+---
+
+## 翻译性能优化操作日志
+记录时间: 2025-11-30 13:08 (UTC+8)
+
+### 工具留痕
+- 12:40 `shell:ls .claude` → 查看现有上下文与日志文件，确认 `context-initial.json` 可用。
+- 12:41 `shell:cat .claude/context-initial.json` → 阅读主AI提供的上下文，锁定阅读器与词典相关代码。
+- 12:42 `shell:rg -n "translate" -g'*'`（frontend/、backend/）→ 快速定位翻译逻辑入口，确认 ReaderPage 与 dictionary API。
+- 12:44 `shell:rg -n youdao backend/app/api/dictionary.py` → 确认有道 API 使用位置与辅助脚本。
+- 12:46 `shell:sed -n '1,200p' frontend/src/components/ReaderPage.tsx`（并追加 250-420、620-1330 行）→ 通读阅读器状态、点击事件与词典渲染结构。
+- 12:48 `shell:sed -n '1,200p' backend/app/api/dictionary.py`（并追加 200-520 行）→ 理解 Free Dictionary/有道查询与缓存实现。
+- 12:49 `shell:sed -n '1,200p' frontend/src/services/api.ts`、`frontend/src/types.ts`、`frontend/src/services/storage.ts` → 查看类型与存储结构，为新增设置项作准备。
+- 12:50 `shell:sed -n '326,420p' frontend/src/services/supabaseService.ts` & `shell:sed -n '1,160p' frontend/src/services/dataMigration.ts` → 确认 ReaderSettings 默认值及迁移逻辑。
+- 12:51 `shell:cat .claude/operations-log.md` → 了解日志格式，准备追加本次操作记录。
+- 12:55 `apply_patch`（backend/app/api/dictionary.py，2次）→ 引入 `asyncio.gather` 并发查询与有道 web 释义解析，确保单个 API 失败不影响整体。
+- 12:58 `apply_patch`（frontend/src/types.ts）→ 在 `ReaderSettings` 中新增 `translationPriority`。
+- 12:59 `apply_patch`（frontend/src/services/storage.ts`、`frontend/src/services/dataMigration.ts`、`frontend/src/services/supabaseService.ts`、`frontend/src/stores/useAppStore.ts`）→ 同步默认值、迁移判定及 Store 状态。
+- 13:02 `apply_patch`（frontend/src/components/ReaderPage.tsx，多次）→ 添加翻译缓存、请求取消、翻译优先级设置 UI、排序逻辑及加载提示文案。
+- 13:06 `apply_patch`（frontend/src/services/api.ts）→ 为 `dictionaryAPI.lookup` 增加 `AxiosRequestConfig` 支持，便于传入 AbortController。
+
+### 实施要点
+1. 后端词典 API 现通过 `asyncio.gather` 并发英文/中文请求，并利用 `return_exceptions=True` 捕获单侧失败；同时扩展有道 `web` 字段解析，返回更多中文释义。
+2. 新增翻译缓存 Map + sessionStorage 持久化，并在前端为每次查询附加 AbortController，避免快速点击造成请求积压或响应乱序。
+3. ReaderSettings/本地存储新增 `translationPriority`，设置面板提供单选项，词典列表按优先级排序展示英/中文释义。
+4. 词典加载态统一展示“正在查询翻译...”提示与描述性文字，改善等待体验，同时清理缓存/状态以保障多终端一致性。
+
+---
+
 ## 管理员配置与文档补全日志
 记录时间: 2025-11-29 14:10 (UTC+8)
 

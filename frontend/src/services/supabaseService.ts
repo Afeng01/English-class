@@ -28,6 +28,7 @@ interface DbUserSettings {
   font_size: 'small' | 'medium' | 'large' | 'xlarge'
   line_height: number
   theme: 'light' | 'dark' | 'sepia'
+  translation_priority?: 'english' | 'chinese'
   updated_at: string
 }
 
@@ -332,6 +333,7 @@ export const settingsService = {
       font_size: 'medium',
       line_height: 1.8,
       theme: 'light',
+      translationPriority: 'english',
     }
 
     if (!user) return defaultSettings
@@ -356,6 +358,7 @@ export const settingsService = {
       font_size: item.font_size,
       line_height: item.line_height,
       theme: item.theme,
+      translationPriority: item.translation_priority || defaultSettings.translationPriority,
     }
   },
 
